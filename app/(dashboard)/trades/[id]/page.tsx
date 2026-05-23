@@ -76,12 +76,12 @@ export default async function TradeDetailPage({
     ? Object.entries(CHECKLIST_LABELS).map(([key, label]) => ({
         key,
         label,
-        checked: (trade.checklist as Record<string, boolean>)[key] === true,
+        checked: (trade.checklist as Record<string, any>)[key] === true,
       }))
     : [];
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 24, maxWidth: 800 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 24, maxWidth: 800, margin: "0 auto", width: "100%" }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
         <div>

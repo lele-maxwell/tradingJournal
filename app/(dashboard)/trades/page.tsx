@@ -153,17 +153,7 @@ export default async function TradesPage({
               <Link
                 key={t.id}
                 href={`/trades/${t.id}`}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 80px 80px 90px 70px 70px",
-                  alignItems: "center",
-                  padding: "13px 20px",
-                  borderBottom: "1px solid var(--border-subtle)",
-                  textDecoration: "none",
-                  transition: "background 0.1s",
-                }}
-                onMouseEnter={(e) => ((e.currentTarget as HTMLAnchorElement).style.background = "var(--bg-hover)")}
-                onMouseLeave={(e) => ((e.currentTarget as HTMLAnchorElement).style.background = "transparent")}
+                className="trade-row"
               >
                 <div>
                   <p style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>

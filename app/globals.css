@@ -337,3 +337,18 @@ main {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* ============ Trade Row ============ */
+.trade-row {
+  display: grid;
+  grid-template-columns: 1fr 80px 80px 90px 70px 70px;
+  align-items: center;
+  padding: 13px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+  text-decoration: none;
+  transition: background 0.1s;
+}
+
+.trade-row:hover {
+  background: var(--bg-hover);
+}
