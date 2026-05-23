@@ -1,65 +1,115 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { Hero } from "@/components/landing/Hero";
+import { Features } from "@/components/landing/Features";
+import { Methodology } from "@/components/landing/Methodology";
+import { FolderIcon } from "@/components/icons/FolderIcon";
+import { createClient } from "@/lib/supabase/client";
+
+export default function LandingPage() {
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const supabase = createClient();
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      const { data } = await supabase.auth.getUser();
+      setUser(data.user);
+      setLoading(false);
+    };
+    fetchUser();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [supabase]);
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="landing-root">
+      <header className="landing-header">
+        <div className="container flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <FolderIcon className="w-8 h-8 text-accent" />
+            <span className="text-xl font-bold tracking-tight text-white">
+              MaxStrat<span className="text-accent">.</span>
+            </span>
+          </div>
+          
+          <nav className="hidden md:flex items-center gap-8">
+            <Link href="#features" className="text-sm text-text-secondary hover:text-accent transition-colors">Features</Link>
+            <Link href="#methodology" className="text-sm text-text-secondary hover:text-accent transition-colors">Methodology</Link>
+            <Link href="#pricing" className="text-sm text-text-secondary hover:text-accent transition-colors">Pricing</Link>
+          </nav>
+
+          <div className="flex items-center gap-4">
+            {loading ? (
+              <div className="w-24 h-9 bg-white/5 animate-pulse rounded" />
+            ) : user ? (
+              <div className="flex items-center gap-6">
+                <Link href="/dashboard" className="text-sm font-medium text-text-secondary hover:text-white transition-colors">
+                  Dashboard
+                </Link>
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-sm font-bold text-white shadow-sm ring-2 ring-white/10">
+                    {user.email?.charAt(0).toUpperCase() || 'U'}
+                  </div>
+                  <span className="text-sm font-medium text-white max-w-[120px] truncate hidden sm:block">
+                    {user.email}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <>
+                <Link href="/login" className="text-sm font-medium text-text-secondary hover:text-white transition-colors">
+                  Login
+                </Link>
+                <Link href="/signup" className="btn btn-primary px-5 py-2 text-sm font-bold">
+                  Join MaxStrat
+                </Link>
+              </>
+            )}
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+      </header>
+
+      <main>
+        <Hero />
+        <Features />
+        <Methodology />
       </main>
+
+      <style jsx>{`
+        .landing-root {
+          min-height: 100vh;
+          background-color: var(--bg-base);
+          color: var(--text-primary);
+        }
+        .landing-header {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: 80px;
+          display: flex;
+          align-items: center;
+          background: rgba(8, 8, 8, 0.8);
+          backdrop-filter: blur(12px);
+          border-bottom: 1px solid var(--border);
+          z-index: 100;
+        }
+        .container {
+          width: 100%;
+          max-width: 1200px;
+          margin: 0 auto;
+          padding: 0 24px;
+        }
+      `}</style>
     </div>
   );
 }

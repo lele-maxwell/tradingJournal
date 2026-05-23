@@ -1,0 +1,87 @@
+generator client {
+  provider = "prisma-client-js"
+  engineType = "library"
+}
+
+datasource db {
+  provider  = "postgresql"
+}
+
+model Trade {
+  id             String   @id @default(cuid())
+  userId         String
+  pair           String
+  direction      String   // "buy" | "sell"
+  strategy       String?
+  entryPrice     Float
+  exitPrice      Float?
+  stopLoss       Float
+  takeProfit     Float
+  positionSize   Float?
+  riskPercent    Float?
+  riskReward     Float?
+  entryTime      DateTime
+  exitTime       DateTime?
+  entryTf        String?
+  higherTf       String?
+  profitLoss     Float?
+  setupNotes     String?
+  executionNotes String?
+  mistakeNotes   String?
+  lessonsLearned String?
+  mentalState    String?
+  followedPlan   Boolean?
+  movedSL        Boolean?
+  enteredEarly   Boolean?
+  overtraded     Boolean?
+  mentalHealthOk Boolean?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  checklist TradeChecklist?
+  images    TradeImage[]
+
+  @@index([userId])
+  @@index([userId, entryTime])
+}
+
+model TradeChecklist {
+  id      String @id @default(cuid())
+  tradeId String @unique
+  trade   Trade  @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+
+  // Market Structure
+  supportRespected    Boolean @default(false)
+  resistanceRespected Boolean @default(false)
+  trendlineRespected  Boolean @default(false)
+  orderBlockRespected Boolean @default(false)
+  confluence          Boolean @default(false)
+  retestConfirmed     Boolean @default(false)
+  rejectionCandle     Boolean @default(false)
+  liquiditySweep      Boolean @default(false)
+  msShift             Boolean @default(false)
+  htfAligned          Boolean @default(false)
+
+  // Session
+  londonSession    Boolean @default(false)
+  nySession        Boolean @default(false)
+  avoidedLowVolume Boolean @default(false)
+
+  // Execution
+  entryConfirmed   Boolean @default(false)
+  riskManaged      Boolean @default(false)
+  noImpulsiveEntry Boolean @default(false)
+
+  score Int @default(0)
+}
+
+model TradeImage {
+  id        String   @id @default(cuid())
+  tradeId   String
+  trade     Trade    @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  imageUrl  String
+  imageType String   // "before_entry" | "after_exit" | "higher_timeframe"
+  createdAt DateTime @default(now())
+
+  @@index([tradeId])
+}
