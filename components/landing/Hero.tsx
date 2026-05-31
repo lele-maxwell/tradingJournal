@@ -9,7 +9,7 @@ export function Hero() {
         <div className="hero-grid">
           <div className="hero-text">
             <div className="badge-wrapper">
-              <span className="badge-premium">The Trader's Edge</span>
+              <span className="badge-premium">The Trader&apos;s Edge</span>
             </div>
             <h1 className="hero-title">
               Professional Discipline <br />
