@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/auth";
+import ExportPdfButton from "@/components/pdf/ExportPdfButton";
+import type { SingleTradePayload } from "@/lib/pdf/generateTradePdf";
 
 export const metadata: Metadata = { title: "Trade Detail" };
 
@@ -80,6 +82,43 @@ export default async function TradeDetailPage({
       }))
     : [];
 
+  const exportPayload: SingleTradePayload = {
+    id: trade.id,
+    pair: trade.pair,
+    direction: trade.direction,
+    strategy: trade.strategy ?? null,
+    entryPrice: trade.entryPrice,
+    exitPrice: trade.exitPrice ?? null,
+    stopLoss: trade.stopLoss,
+    takeProfit: trade.takeProfit,
+    positionSize: trade.positionSize ?? null,
+    riskPercent: trade.riskPercent ?? null,
+    riskReward: trade.riskReward ?? null,
+    entryTime: trade.entryTime.toISOString(),
+    exitTime: trade.exitTime ? trade.exitTime.toISOString() : null,
+    entryTf: trade.entryTf ?? null,
+    higherTf: trade.higherTf ?? null,
+    profitLoss: trade.profitLoss ?? null,
+    setupNotes: trade.setupNotes ?? null,
+    executionNotes: trade.executionNotes ?? null,
+    mistakeNotes: trade.mistakeNotes ?? null,
+    lessonsLearned: trade.lessonsLearned ?? null,
+    mentalState: trade.mentalState ?? null,
+    followedPlan: trade.followedPlan ?? null,
+    movedSL: trade.movedSL ?? null,
+    enteredEarly: trade.enteredEarly ?? null,
+    overtraded: trade.overtraded ?? null,
+    mentalHealthOk: trade.mentalHealthOk ?? null,
+    checklist: trade.checklist
+      ? { score: trade.checklist.score, items: checklistEntries }
+      : null,
+    images: trade.images.map((img) => ({
+      id: img.id,
+      imageUrl: img.imageUrl,
+      imageType: img.imageType,
+    })),
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24, maxWidth: 800, margin: "0 auto", width: "100%" }}>
       {/* Header */}
@@ -104,13 +143,14 @@ export default async function TradeDetailPage({
             {trade.strategy ? ` · ${trade.strategy}` : ""}
           </p>
         </div>
-        <div style={{ textAlign: "right" }}>
+        <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
           <p style={{ fontSize: 28, fontWeight: 700, color: isWin ? "var(--success)" : isLoss ? "var(--danger)" : "var(--text-muted)", letterSpacing: "-0.03em" }}>
             {formatPL(pl)}
           </p>
           {trade.riskReward && (
             <p style={{ fontSize: 12, color: "var(--text-muted)" }}>RR: {trade.riskReward}</p>
           )}
+          <ExportPdfButton variant="trade" payload={exportPayload} label="Export trade" />
         </div>
       </div>
 

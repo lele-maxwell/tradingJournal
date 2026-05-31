@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/auth";
 import Link from "next/link";
+import ExportPdfButton from "@/components/pdf/ExportPdfButton";
+import type { ReportTrade } from "@/lib/pdf/generateReportPdf";
 
 export const metadata: Metadata = { title: "Trade History" };
 
@@ -45,6 +47,26 @@ export default async function TradesPage({
       })
     : trades;
 
+  const exportTrades: ReportTrade[] = filtered.map((t) => ({
+    id: t.id,
+    pair: t.pair,
+    direction: t.direction,
+    entryTime: t.entryTime.toISOString(),
+    exitTime: t.exitTime ? t.exitTime.toISOString() : null,
+    profitLoss: t.profitLoss ?? null,
+    riskReward: t.riskReward ?? null,
+    checklistScore: t.checklist?.score ?? null,
+  }));
+
+  const filterChips = [
+    q ? `search: ${q}` : null,
+    direction ? `direction: ${direction}` : null,
+    outcome ? `outcome: ${outcome}` : null,
+  ].filter(Boolean);
+  const exportSubtitle = filterChips.length
+    ? `Filtered · ${filterChips.join(" · ")}`
+    : "All trades";
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
       {/* Header */}
@@ -57,9 +79,21 @@ export default async function TradesPage({
             {filtered.length} trade{filtered.length !== 1 ? "s" : ""}
           </p>
         </div>
-        <Link href="/trades/new" className="btn btn-primary">
-          + New Trade
-        </Link>
+        <div style={{ display: "flex", gap: 8 }}>
+          <ExportPdfButton
+            variant="report"
+            enableRangePicker
+            payload={{
+              title: "Trade History",
+              subtitle: exportSubtitle,
+              filenameSlug: "trade-history",
+              trades: exportTrades,
+            }}
+          />
+          <Link href="/trades/new" className="btn btn-primary">
+            + New Trade
+          </Link>
+        </div>
       </div>
 
       {/* Filters */}

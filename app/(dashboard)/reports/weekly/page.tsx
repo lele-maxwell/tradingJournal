@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/auth";
+import ExportPdfButton from "@/components/pdf/ExportPdfButton";
+import type { ReportTrade } from "@/lib/pdf/generateReportPdf";
 
 export const metadata: Metadata = { title: "Weekly Report" };
 
@@ -51,6 +53,18 @@ export default async function WeeklyReportPage() {
   // Most common mistake
   const mistakes = trades.filter((t) => t.mistakeNotes).map((t) => t.mistakeNotes!);
 
+  const exportTrades: ReportTrade[] = trades.map((t) => ({
+    id: t.id,
+    pair: t.pair,
+    direction: t.direction,
+    entryTime: t.entryTime.toISOString(),
+    exitTime: t.exitTime ? t.exitTime.toISOString() : null,
+    profitLoss: t.profitLoss ?? null,
+    riskReward: t.riskReward ?? null,
+    checklistScore: t.checklist?.score ?? null,
+  }));
+  const weekRangeLabel = `${weekStart.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} — ${weekEnd.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`;
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24, maxWidth: 760 }}>
       {/* Header */}
@@ -64,9 +78,21 @@ export default async function WeeklyReportPage() {
             {weekEnd.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
           </p>
         </div>
-        <Link href="/reports/monthly" style={{ fontSize: 13, color: "var(--accent)", textDecoration: "none" }}>
-          Monthly report →
-        </Link>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <ExportPdfButton
+            variant="report"
+            payload={{
+              title: "Weekly Report",
+              subtitle: weekRangeLabel,
+              dateRange: weekRangeLabel,
+              filenameSlug: "weekly",
+              trades: exportTrades,
+            }}
+          />
+          <Link href="/reports/monthly" style={{ fontSize: 13, color: "var(--accent)", textDecoration: "none" }}>
+            Monthly report →
+          </Link>
+        </div>
       </div>
 
       {total === 0 ? (

@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/auth";
 import Link from "next/link";
+import ExportPdfButton from "@/components/pdf/ExportPdfButton";
+import type { ReportTrade } from "@/lib/pdf/generateReportPdf";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -30,7 +32,17 @@ export default async function DashboardPage() {
   const [allTrades, recentTrades, weekTrades] = await Promise.all([
     prisma.trade.findMany({
       where: { userId: user.id },
-      select: { profitLoss: true, riskReward: true },
+      orderBy: { entryTime: "desc" },
+      select: {
+        id: true,
+        pair: true,
+        direction: true,
+        entryTime: true,
+        exitTime: true,
+        profitLoss: true,
+        riskReward: true,
+        checklist: { select: { score: true } },
+      },
     }),
     prisma.trade.findMany({
       where: { userId: user.id },
@@ -43,6 +55,17 @@ export default async function DashboardPage() {
       select: { profitLoss: true },
     }),
   ]);
+
+  const exportTrades: ReportTrade[] = allTrades.map((t) => ({
+    id: t.id,
+    pair: t.pair,
+    direction: t.direction,
+    entryTime: t.entryTime.toISOString(),
+    exitTime: t.exitTime ? t.exitTime.toISOString() : null,
+    profitLoss: t.profitLoss ?? null,
+    riskReward: t.riskReward ?? null,
+    checklistScore: t.checklist?.score ?? null,
+  }));
 
   const total = allTrades.length;
   const wins = allTrades.filter((t) => (t.profitLoss ?? 0) > 0).length;
@@ -73,9 +96,21 @@ export default async function DashboardPage() {
             Your trading performance overview
           </p>
         </div>
-        <Link href="/trades/new" className="btn btn-primary">
-          + New Trade
-        </Link>
+        <div style={{ display: "flex", gap: 8 }}>
+          <ExportPdfButton
+            variant="report"
+            enableRangePicker
+            payload={{
+              title: "Trading Journal",
+              subtitle: "Performance overview",
+              filenameSlug: "dashboard",
+              trades: exportTrades,
+            }}
+          />
+          <Link href="/trades/new" className="btn btn-primary">
+            + New Trade
+          </Link>
+        </div>
       </div>
 
       {/* Stats Grid */}
