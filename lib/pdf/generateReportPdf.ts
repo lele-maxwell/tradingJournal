@@ -171,7 +171,7 @@ export async function generateReportPdf(input: GenerateReportInput): Promise<voi
 
     autoTable(doc, {
       startY: cursorY + 2,
-      margin: { left: PAGE.margin, right: PAGE.margin, bottom: 20 },
+      margin: { left: PAGE.margin, right: PAGE.margin, top: 38, bottom: 20 },
       head,
       body,
       theme: "plain",
@@ -226,8 +226,11 @@ export async function generateReportPdf(input: GenerateReportInput): Promise<voi
           data.cell.styles.textColor = t.direction === "buy" ? T.accent : T.textSecondary;
         }
       },
-      didDrawPage: () => {
-        // Re-paint background and header on every page (autoTable adds pages)
+      willDrawPage: (data) => {
+        // Page 1 already painted + headered by the caller above; only stamp
+        // background + header on continuation pages, BEFORE autoTable draws
+        // the page's rows. Using didDrawPage here would overpaint the table.
+        if (data.pageNumber === 1) return;
         paintBackground(doc);
         drawHeader(doc, input.title, input.subtitle, { dateRange: input.dateRange });
       },

@@ -117,6 +117,31 @@ function drawCard(
   doc.roundedRect(x, y, w, h, CARD_RADIUS, CARD_RADIUS, "FD");
 }
 
+function drawTick(doc: jsPDF, x: number, y: number, color: [number, number, number]) {
+  setDraw(doc, color);
+  doc.setLineWidth(0.55);
+  doc.setLineCap("round");
+  doc.setLineJoin("round");
+  doc.line(x + 0.2, y - 1.3, x + 1.3, y - 0.2);
+  doc.line(x + 1.3, y - 0.2, x + 3.1, y - 2.4);
+  doc.setLineCap("butt");
+  doc.setLineJoin("miter");
+}
+
+function drawCross(doc: jsPDF, x: number, y: number, color: [number, number, number]) {
+  setDraw(doc, color);
+  doc.setLineWidth(0.55);
+  doc.setLineCap("round");
+  doc.line(x + 0.3, y - 2.3, x + 2.7, y);
+  doc.line(x + 0.3, y, x + 2.7, y - 2.3);
+  doc.setLineCap("butt");
+}
+
+function drawNeutralDot(doc: jsPDF, x: number, y: number, color: [number, number, number]) {
+  setFill(doc, color);
+  doc.circle(x + 1.3, y - 0.9, 0.55, "F");
+}
+
 function ensureSpace(
   doc: jsPDF,
   cursorY: number,
@@ -300,10 +325,12 @@ export async function generateTradePdf(trade: SingleTradePayload): Promise<void>
         setFill(doc, T.bgSurface);
         doc.rect(checklistX, rowY - 3, checklistW, 4.4, "F");
       }
-      // Mark
-      setText(doc, item.checked ? T.accent : T.textMuted);
-      doc.setFont("helvetica", "bold");
-      doc.text(item.checked ? "✓" : "·", checklistX + 3, rowY);
+      // Mark — vector shapes (jsPDF helvetica is WinAnsi; ✓/✗ render as apostrophes)
+      if (item.checked) {
+        drawTick(doc, checklistX + 3, rowY, T.accent);
+      } else {
+        drawNeutralDot(doc, checklistX + 3, rowY, T.textMuted);
+      }
       // Label
       setText(doc, item.checked ? T.textPrimary : T.textMuted);
       doc.setFont("helvetica", "normal");
@@ -346,12 +373,14 @@ export async function generateTradePdf(trade: SingleTradePayload): Promise<void>
   toggles.forEach((t, idx) => {
     const val = trade[t.key] as boolean | null;
     const rowY = y + 5 + idx * 4;
-    setText(
-      doc,
-      val === true ? T.success : val === false ? T.danger : T.textMuted
-    );
-    doc.setFont("helvetica", "bold");
-    doc.text(val === true ? "✓" : val === false ? "✗" : "·", togglesX, rowY);
+    // Vector mark (jsPDF helvetica cannot render U+2713 / U+2717)
+    if (val === true) {
+      drawTick(doc, togglesX, rowY, T.success);
+    } else if (val === false) {
+      drawCross(doc, togglesX, rowY, T.danger);
+    } else {
+      drawNeutralDot(doc, togglesX, rowY, T.textMuted);
+    }
     setText(doc, T.textSecondary);
     doc.setFont("helvetica", "normal");
     doc.text(t.label, togglesX + 5, rowY);
