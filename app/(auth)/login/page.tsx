@@ -85,6 +85,28 @@ export default function LoginPage() {
               />
             </div>
 
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 13 }}>
+                <input
+                  type="checkbox"
+                  name="remember"
+                  style={{ accentColor: "var(--accent)" }}
+                />
+                <span style={{ color: "var(--text-muted)" }}>Remember me</span>
+              </label>
+              <Link
+                href="/forgot-password"
+                style={{
+                  fontSize: 13,
+                  color: "var(--accent)",
+                  textDecoration: "none",
+                  fontWeight: 500,
+                }}
+              >
+                Forgot password?
+              </Link>
+            </div>
+
             {state.error && (
               <div
                 style={{
