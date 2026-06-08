@@ -5,6 +5,10 @@ import Link from "next/link";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
+type TradeWithPL = { profitLoss: number | null; riskReward: number | null };
+type TradeWithChecklist = { id: string; pair: string; direction: string; entryTime: Date; profitLoss: number | null; checklist: { score: number } | null };
+type TradeProfitOnly = { profitLoss: number | null };
+
 function formatPL(value: number | null) {
   if (value === null) return "—";
   const sign = value >= 0 ? "+" : "";
@@ -45,18 +49,18 @@ export default async function DashboardPage() {
   ]);
 
   const total = allTrades.length;
-  const wins = allTrades.filter((t) => (t.profitLoss ?? 0) > 0).length;
+  const wins = allTrades.filter((t: TradeWithPL) => (t.profitLoss ?? 0) > 0).length;
   const winRate = total ? Math.round((wins / total) * 100) : 0;
-  const totalPL = allTrades.reduce((s, t) => s + (t.profitLoss ?? 0), 0);
+  const totalPL = allTrades.reduce((s: number, t: TradeWithPL) => s + (t.profitLoss ?? 0), 0);
   const avgRR =
     total
-      ? allTrades.reduce((s, t) => s + (t.riskReward ?? 0), 0) / total
+      ? allTrades.reduce((s: number, t: TradeWithPL) => s + (t.riskReward ?? 0), 0) / total
       : 0;
-  const weekPL = weekTrades.reduce((s, t) => s + (t.profitLoss ?? 0), 0);
+  const weekPL = weekTrades.reduce((s: number, t: TradeProfitOnly) => s + (t.profitLoss ?? 0), 0);
   const avgChecklist =
     recentTrades.length
       ? Math.round(
-          recentTrades.reduce((s, t) => s + (t.checklist?.score ?? 0), 0) /
+          recentTrades.reduce((s: number, t: TradeWithChecklist) => s + (t.checklist?.score ?? 0), 0) /
             recentTrades.length
         )
       : 0;
@@ -119,7 +123,7 @@ export default async function DashboardPage() {
             </div>
           ) : (
             <div>
-              {recentTrades.map((t) => {
+              {recentTrades.map((t: TradeWithChecklist) => {
                 const pl = t.profitLoss ?? null;
                 const isWin = pl !== null && pl > 0;
                 const isLoss = pl !== null && pl < 0;

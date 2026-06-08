@@ -6,6 +6,8 @@ import { getUser } from "@/lib/auth";
 
 export const metadata: Metadata = { title: "Trade Detail" };
 
+type TradeImage = { id: string; imageType: string; imageUrl: string };
+
 const CHECKLIST_LABELS: Record<string, string> = {
   supportRespected: "Support respected",
   resistanceRespected: "Resistance respected",
@@ -119,7 +121,7 @@ export default async function TradeDetailPage({
         <div className="card">
           <p className="section-title">Screenshots</p>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
-            {trade.images.map((img) => (
+            {(trade.images as TradeImage[]).map((img: TradeImage) => (
               <div key={img.id}>
                 <p style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6, textTransform: "capitalize" }}>
                   {img.imageType.replace(/_/g, " ")}

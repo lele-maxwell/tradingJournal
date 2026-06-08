@@ -5,6 +5,8 @@ import { getUser } from "@/lib/auth";
 
 export const metadata: Metadata = { title: "Weekly Report" };
 
+type TradeWithChecklist = { id: string; pair: string; direction: string; entryTime: Date; profitLoss: number | null; riskReward: number | null; strategy: string | null; mentalState: string | null; mistakeNotes: string | null; checklist: { score: number } | null };
+
 function formatPL(value: number) {
   const sign = value >= 0 ? "+" : "";
   return `${sign}${value.toFixed(2)}`;
@@ -32,24 +34,26 @@ export default async function WeeklyReportPage() {
   });
 
   const total = trades.length;
-  const wins = trades.filter((t) => (t.profitLoss ?? 0) > 0).length;
-  const losses = trades.filter((t) => (t.profitLoss ?? 0) < 0).length;
+  const wins = trades.filter((t: TradeWithChecklist) => (t.profitLoss ?? 0) > 0).length;
+  const losses = trades.filter((t: TradeWithChecklist) => (t.profitLoss ?? 0) < 0).length;
   const winRate = total ? Math.round((wins / total) * 100) : 0;
-  const totalPL = trades.reduce((s, t) => s + (t.profitLoss ?? 0), 0);
-  const avgRR = total ? trades.reduce((s, t) => s + (t.riskReward ?? 0), 0) / total : 0;
+  const totalPL = trades.reduce((s: number, t: TradeWithChecklist) => s + (t.profitLoss ?? 0), 0);
+  const avgRR = total ? trades.reduce((s: number, t: TradeWithChecklist) => s + (t.riskReward ?? 0), 0) / total : 0;
   const avgChecklist = total
-    ? Math.round(trades.reduce((s, t) => s + (t.checklist?.score ?? 0), 0) / total)
+    ? Math.round(trades.reduce((s: number, t: TradeWithChecklist) => s + (t.checklist?.score ?? 0), 0) / total)
     : 0;
 
   // Mental state overview
   const mentalCounts: Record<string, number> = {};
-  trades.forEach((t) => {
+  trades.forEach((t: TradeWithChecklist) => {
     if (t.mentalState) mentalCounts[t.mentalState] = (mentalCounts[t.mentalState] ?? 0) + 1;
   });
   const topMentalState = Object.entries(mentalCounts).sort((a, b) => b[1] - a[1])[0];
 
   // Most common mistake
-  const mistakes = trades.filter((t) => t.mistakeNotes).map((t) => t.mistakeNotes!);
+  const mistakes = trades.filter((t: TradeWithChecklist) => t.mistakeNotes).map((t: TradeWithChecklist) => t.mistakeNotes!);
+
+  const typedTrades = trades as TradeWithChecklist[];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24, maxWidth: 760 }}>
@@ -126,7 +130,7 @@ export default async function WeeklyReportPage() {
             <div className="card">
               <p className="section-title">Mistakes This Week</p>
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {mistakes.map((m, i) => (
+                {mistakes.map((m: string, i: number) => (
                   <div key={i} style={{ padding: "10px 12px", background: "var(--danger-muted)", border: "1px solid var(--danger)", borderRadius: 7, fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6 }}>
                     {m}
                   </div>
@@ -140,7 +144,7 @@ export default async function WeeklyReportPage() {
             <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--border-subtle)" }}>
               <h2 style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Trades This Week</h2>
             </div>
-            {trades.map((t) => {
+            {typedTrades.map((t: TradeWithChecklist) => {
               const pl = t.profitLoss ?? null;
               const isWin = pl !== null && pl > 0;
               const isLoss = pl !== null && pl < 0;

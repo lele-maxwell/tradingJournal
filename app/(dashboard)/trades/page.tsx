@@ -5,6 +5,8 @@ import Link from "next/link";
 
 export const metadata: Metadata = { title: "Trade History" };
 
+type TradeWithChecklist = { id: string; pair: string; direction: string; entryTime: Date; exitTime: Date | null; profitLoss: number | null; riskReward: number | null; strategy: string | null; checklist: { score: number } | null };
+
 function formatPL(value: number | null) {
   if (value === null) return "—";
   const sign = value >= 0 ? "+" : "";
@@ -36,7 +38,7 @@ export default async function TradesPage({
 
   // Filter outcome client-side (derived field)
   const filtered = outcome
-    ? trades.filter((t) => {
+    ? trades.filter((t: TradeWithChecklist) => {
         const pl = t.profitLoss ?? 0;
         if (outcome === "win") return pl > 0;
         if (outcome === "loss") return pl < 0;
@@ -44,6 +46,8 @@ export default async function TradesPage({
         return true;
       })
     : trades;
+
+  const typedTrades = filtered as TradeWithChecklist[];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
@@ -145,7 +149,7 @@ export default async function TradesPage({
             <span style={{ textAlign: "right" }}>Checklist</span>
           </div>
 
-          {filtered.map((t) => {
+          {typedTrades.map((t: TradeWithChecklist) => {
             const pl = t.profitLoss ?? null;
             const isWin = pl !== null && pl > 0;
             const isLoss = pl !== null && pl < 0;
