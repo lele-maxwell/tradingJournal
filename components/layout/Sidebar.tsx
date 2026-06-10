@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
+import { LanguageSelector } from "@/components/language-selector";
 
 const navItems = [
   {
@@ -208,6 +209,11 @@ export default function Sidebar() {
           </div>
         )}
       </nav>
+
+      {/* Language Selector */}
+      <div style={{ padding: "10px 8px" }}>
+        <LanguageSelector />
+      </div>
 
       {/* Logout */}
       <div style={{ padding: "10px 8px", borderTop: "1px solid var(--border-subtle)" }}>
