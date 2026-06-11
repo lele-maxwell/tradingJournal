@@ -42,7 +42,8 @@ export function PdfExportButton({ range, label = "Export PDF", variant = "second
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      // Defer revocation to avoid issues in some browsers
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Export failed");
     } finally {
