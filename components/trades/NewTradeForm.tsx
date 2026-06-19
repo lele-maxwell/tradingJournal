@@ -1,57 +1,72 @@
 "use client";
 
 import { useActionState, useState, useCallback } from "react";
+import { useTranslations } from "next-intl";
 import { createTradeAction, type TradeActionState } from "@/lib/actions/trade.actions";
 import { calcChecklistScore, calcRR } from "@/lib/validations/trade.schema";
 
 const initialState: TradeActionState = {};
 
 // ────────────────────────────────────────────────────────────────
-// Checklist config
+// Checklist config (label keys resolve via useTranslations)
 // ────────────────────────────────────────────────────────────────
 const CHECKLIST_GROUPS = [
   {
-    label: "Market Structure",
+    labelKey: "groupMarketStructure",
     items: [
-      { name: "supportRespected", label: "Support respected" },
-      { name: "resistanceRespected", label: "Resistance respected" },
-      { name: "trendlineRespected", label: "Trendline respected" },
-      { name: "orderBlockRespected", label: "Order block respected" },
-      { name: "confluence", label: "Confluence / Intersection present" },
-      { name: "retestConfirmed", label: "Retest confirmed" },
-      { name: "rejectionCandle", label: "Rejection candle formed" },
-      { name: "liquiditySweep", label: "Liquidity sweep occurred" },
-      { name: "msShift", label: "Market structure shift confirmed" },
-      { name: "htfAligned", label: "Higher timeframe aligned" },
+      { name: "supportRespected", labelKey: "supportRespected" },
+      { name: "resistanceRespected", labelKey: "resistanceRespected" },
+      { name: "trendlineRespected", labelKey: "trendlineRespected" },
+      { name: "orderBlockRespected", labelKey: "orderBlockRespected" },
+      { name: "confluence", labelKey: "confluence" },
+      { name: "retestConfirmed", labelKey: "retestConfirmed" },
+      { name: "rejectionCandle", labelKey: "rejectionCandle" },
+      { name: "liquiditySweep", labelKey: "liquiditySweep" },
+      { name: "msShift", labelKey: "msShift" },
+      { name: "htfAligned", labelKey: "htfAligned" },
     ],
   },
   {
-    label: "Session Conditions",
+    labelKey: "groupSessionConditions",
     items: [
-      { name: "londonSession", label: "London session" },
-      { name: "nySession", label: "New York session" },
-      { name: "avoidedLowVolume", label: "Avoided low-volume hours" },
+      { name: "londonSession", labelKey: "londonSession" },
+      { name: "nySession", labelKey: "nySession" },
+      { name: "avoidedLowVolume", labelKey: "avoidedLowVolume" },
     ],
   },
   {
-    label: "Execution",
+    labelKey: "groupExecution",
     items: [
-      { name: "entryConfirmed", label: "Entry confirmation respected" },
-      { name: "riskManaged", label: "Risk management respected" },
-      { name: "noImpulsiveEntry", label: "No impulsive entry" },
+      { name: "entryConfirmed", labelKey: "entryConfirmed" },
+      { name: "riskManaged", labelKey: "riskManaged" },
+      { name: "noImpulsiveEntry", labelKey: "noImpulsiveEntry" },
     ],
   },
 ];
 
 const MENTAL_STATES = [
-  { value: "calm", label: "😌 Calm" },
-  { value: "focused", label: "🎯 Focused" },
-  { value: "tired", label: "😴 Tired" },
-  { value: "fearful", label: "😨 Fearful" },
-  { value: "overconfident", label: "😤 Overconfident" },
-  { value: "revenge", label: "😤 Revenge trading" },
-  { value: "emotional", label: "😰 Emotional" },
-  { value: "distracted", label: "🙃 Distracted" },
+  { value: "calm", labelKey: "calm" },
+  { value: "focused", labelKey: "focused" },
+  { value: "tired", labelKey: "tired" },
+  { value: "fearful", labelKey: "fearful" },
+  { value: "overconfident", labelKey: "overconfident" },
+  { value: "revenge", labelKey: "revenge" },
+  { value: "emotional", labelKey: "emotional" },
+  { value: "distracted", labelKey: "distracted" },
+];
+
+const PSYCH_QUESTIONS = [
+  { name: "followedPlan", labelKey: "followedPlan" },
+  { name: "movedSL", labelKey: "movedSL" },
+  { name: "enteredEarly", labelKey: "enteredEarly" },
+  { name: "overtraded", labelKey: "overtraded" },
+  { name: "mentalHealthOk", labelKey: "mentalHealthOk" },
+];
+
+const SCREENSHOT_SLOTS = [
+  { type: "before_entry", labelKey: "beforeEntry", icon: "📷" },
+  { type: "after_exit", labelKey: "afterExit", icon: "📸" },
+  { type: "higher_timeframe", labelKey: "htfAnalysis", icon: "🔭" },
 ];
 
 const TIMEFRAMES = ["1m", "5m", "15m", "30m", "1h", "4h", "1D", "1W"];
@@ -61,6 +76,9 @@ const TIMEFRAMES = ["1m", "5m", "15m", "30m", "1h", "4h", "1D", "1W"];
 // ────────────────────────────────────────────────────────────────
 export default function NewTradeForm() {
   const [state, action, pending] = useActionState(createTradeAction, initialState);
+  const t = useTranslations("newTrade");
+  const tChecklist = useTranslations("newTrade.checklist");
+  const tMentalStates = useTranslations("newTrade.mentalStates");
 
   // Checklist booleans
   const [checklist, setChecklist] = useState<Record<string, boolean>>({});
@@ -111,8 +129,8 @@ export default function NewTradeForm() {
       {/* ── Section 1: Strategy Checklist ── */}
       <Section
         number={1}
-        title="Strategy Checklist"
-        subtitle={`${score} / 16 confirmations met`}
+        title={t("section1Title")}
+        subtitle={t("confirmationsMet", { score })}
         scoreColor={score >= 10 ? "var(--success)" : score >= 6 ? "var(--warning)" : "var(--danger)"}
       >
         {/* Score bar */}
@@ -143,8 +161,8 @@ export default function NewTradeForm() {
 
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
           {CHECKLIST_GROUPS.map((group) => (
-            <div key={group.label}>
-              <p className="section-title">{group.label}</p>
+            <div key={group.labelKey}>
+              <p className="section-title">{t(group.labelKey)}</p>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
                 {group.items.map((item) => (
                   <label
@@ -181,7 +199,7 @@ export default function NewTradeForm() {
                       }}
                       onClick={() => toggleChecklist(item.name)}
                     >
-                      {item.label}
+                      {tChecklist(item.labelKey)}
                     </span>
                   </label>
                 ))}
@@ -192,14 +210,14 @@ export default function NewTradeForm() {
       </Section>
 
       {/* ── Section 2: Trade Journal ── */}
-      <Section number={2} title="Trade Journal" subtitle="Record your execution details">
+      <Section number={2} title={t("section2Title")} subtitle={t("section2Subtitle")}>
         <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
           {/* Row 1: Pair + Direction + Strategy */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
-            <Field label="Asset / Pair *" error={fe.pair?.[0]}>
-              <input name="pair" placeholder="e.g. EUR/USD" className={`input ${fe.pair ? "input-error" : ""}`} />
+            <Field label={t("fieldPair")} error={fe.pair?.[0]}>
+              <input name="pair" placeholder={t("pairPlaceholder")} className={`input ${fe.pair ? "input-error" : ""}`} />
             </Field>
-            <Field label="Direction *" error={fe.direction?.[0]}>
+            <Field label={t("fieldDirection")} error={fe.direction?.[0]}>
               <select
                 name="direction"
                 className="input"
@@ -207,46 +225,46 @@ export default function NewTradeForm() {
                 onChange={(e) => setPrices((p) => ({ ...p, direction: e.target.value }))}
                 style={{ cursor: "pointer" }}
               >
-                <option value="buy">📈 Buy / Long</option>
-                <option value="sell">📉 Sell / Short</option>
+                <option value="buy">{t("buyLong")}</option>
+                <option value="sell">{t("sellShort")}</option>
               </select>
             </Field>
-            <Field label="Strategy">
-              <input name="strategy" placeholder="e.g. OB Retest" className="input" />
+            <Field label={t("fieldStrategy")}>
+              <input name="strategy" placeholder={t("strategyPlaceholder")} className="input" />
             </Field>
           </div>
 
           {/* Row 2: Entry, Exit, SL, TP */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 14 }}>
-            <Field label="Entry Price *" error={fe.entryPrice?.[0]}>
+            <Field label={t("fieldEntryPrice")} error={fe.entryPrice?.[0]}>
               <input
                 name="entryPrice"
                 type="number"
                 step="any"
-                placeholder="0.00"
+                placeholder={t("pricePlaceholder")}
                 className={`input ${fe.entryPrice ? "input-error" : ""}`}
                 onChange={(e) => setPrices((p) => ({ ...p, entry: e.target.value }))}
               />
             </Field>
-            <Field label="Exit Price">
-              <input name="exitPrice" type="number" step="any" placeholder="0.00" className="input" />
+            <Field label={t("fieldExitPrice")}>
+              <input name="exitPrice" type="number" step="any" placeholder={t("pricePlaceholder")} className="input" />
             </Field>
-            <Field label="Stop Loss *" error={fe.stopLoss?.[0]}>
+            <Field label={t("fieldStopLoss")} error={fe.stopLoss?.[0]}>
               <input
                 name="stopLoss"
                 type="number"
                 step="any"
-                placeholder="0.00"
+                placeholder={t("pricePlaceholder")}
                 className={`input ${fe.stopLoss ? "input-error" : ""}`}
                 onChange={(e) => setPrices((p) => ({ ...p, sl: e.target.value }))}
               />
             </Field>
-            <Field label="Take Profit *" error={fe.takeProfit?.[0]}>
+            <Field label={t("fieldTakeProfit")} error={fe.takeProfit?.[0]}>
               <input
                 name="takeProfit"
                 type="number"
                 step="any"
-                placeholder="0.00"
+                placeholder={t("pricePlaceholder")}
                 className={`input ${fe.takeProfit ? "input-error" : ""}`}
                 onChange={(e) => setPrices((p) => ({ ...p, tp: e.target.value }))}
               />
@@ -269,65 +287,65 @@ export default function NewTradeForm() {
                 fontWeight: 600,
               }}
             >
-              Calculated RR: 1 : {rr}
+              {t("calculatedRR", { rr })}
             </div>
           )}
 
           {/* Row 3: Risk */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-            <Field label="Position Size">
-              <input name="positionSize" type="number" step="any" placeholder="e.g. 0.10 lots" className="input" />
+            <Field label={t("fieldPositionSize")}>
+              <input name="positionSize" type="number" step="any" placeholder={t("positionSizePlaceholder")} className="input" />
             </Field>
-            <Field label="Risk %">
-              <input name="riskPercent" type="number" step="any" min="0" max="100" placeholder="e.g. 1" className="input" />
+            <Field label={t("fieldRiskPercent")}>
+              <input name="riskPercent" type="number" step="any" min="0" max="100" placeholder={t("riskPercentPlaceholder")} className="input" />
             </Field>
           </div>
 
           {/* Row 4: Timing */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 14 }}>
-            <Field label="Entry Time *" error={fe.entryTime?.[0]}>
+            <Field label={t("fieldEntryTime")} error={fe.entryTime?.[0]}>
               <input name="entryTime" type="datetime-local" className={`input ${fe.entryTime ? "input-error" : ""}`} />
             </Field>
-            <Field label="Exit Time">
+            <Field label={t("fieldExitTime")}>
               <input name="exitTime" type="datetime-local" className="input" />
             </Field>
-            <Field label="Entry Timeframe">
+            <Field label={t("fieldEntryTimeframe")}>
               <select name="entryTf" className="input">
-                <option value="">Select TF</option>
+                <option value="">{t("selectTf")}</option>
                 {TIMEFRAMES.map((tf) => <option key={tf} value={tf}>{tf}</option>)}
               </select>
             </Field>
-            <Field label="Higher TF">
+            <Field label={t("fieldHigherTf")}>
               <select name="higherTf" className="input">
-                <option value="">Select TF</option>
+                <option value="">{t("selectTf")}</option>
                 {TIMEFRAMES.map((tf) => <option key={tf} value={tf}>{tf}</option>)}
               </select>
             </Field>
           </div>
 
           {/* Notes */}
-          <Field label="Setup Explanation">
-            <textarea name="setupNotes" rows={3} placeholder="Describe your setup and why you took this trade…" className="input" style={{ resize: "vertical" }} />
+          <Field label={t("fieldSetupExplanation")}>
+            <textarea name="setupNotes" rows={3} placeholder={t("setupPlaceholder")} className="input" style={{ resize: "vertical" }} />
           </Field>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-            <Field label="Execution Notes">
-              <textarea name="executionNotes" rows={2} placeholder="How did the execution go?" className="input" style={{ resize: "vertical" }} />
+            <Field label={t("fieldExecutionNotes")}>
+              <textarea name="executionNotes" rows={2} placeholder={t("executionPlaceholder")} className="input" style={{ resize: "vertical" }} />
             </Field>
-            <Field label="Mistakes Made">
-              <textarea name="mistakeNotes" rows={2} placeholder="Any mistakes?" className="input" style={{ resize: "vertical" }} />
+            <Field label={t("fieldMistakesMade")}>
+              <textarea name="mistakeNotes" rows={2} placeholder={t("mistakesPlaceholder")} className="input" style={{ resize: "vertical" }} />
             </Field>
           </div>
-          <Field label="Lessons Learned">
-            <textarea name="lessonsLearned" rows={2} placeholder="What will you do differently?" className="input" style={{ resize: "vertical" }} />
+          <Field label={t("fieldLessonsLearned")}>
+            <textarea name="lessonsLearned" rows={2} placeholder={t("lessonsPlaceholder")} className="input" style={{ resize: "vertical" }} />
           </Field>
         </div>
       </Section>
 
       {/* ── Section 3: Psychology ── */}
-      <Section number={3} title="Psychology" subtitle="Track your mental state">
+      <Section number={3} title={t("section3Title")} subtitle={t("section3Subtitle")}>
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
           <div>
-            <p className="section-title">Emotional State</p>
+            <p className="section-title">{t("emotionalState")}</p>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
               {MENTAL_STATES.map((ms) => (
                 <button
@@ -348,22 +366,16 @@ export default function NewTradeForm() {
                     transition: "all 0.12s",
                   }}
                 >
-                  {ms.label}
+                  {tMentalStates(ms.labelKey as never)}
                 </button>
               ))}
             </div>
           </div>
 
           <div>
-            <p className="section-title">Self-Assessment</p>
+            <p className="section-title">{t("selfAssessment")}</p>
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              {[
-                { name: "followedPlan", label: "✅ I followed my trading plan" },
-                { name: "movedSL", label: "⚠️ I moved my Stop Loss emotionally" },
-                { name: "enteredEarly", label: "⚠️ I entered too early" },
-                { name: "overtraded", label: "⚠️ I overtraded today" },
-                { name: "mentalHealthOk", label: "✅ My mental health was okay before entry" },
-              ].map((q) => (
+              {PSYCH_QUESTIONS.map((q) => (
                 <label
                   key={q.name}
                   className={`toggle-item ${psych[q.name] ? "checked" : ""}`}
@@ -391,7 +403,7 @@ export default function NewTradeForm() {
                     )}
                   </div>
                   <span style={{ fontSize: 13, color: "var(--text-secondary)", userSelect: "none" }}>
-                    {q.label}
+                    {t(q.labelKey)}
                   </span>
                 </label>
               ))}
@@ -401,18 +413,15 @@ export default function NewTradeForm() {
       </Section>
 
       {/* ── Section 4: Screenshots ── */}
-      <Section number={4} title="Screenshots" subtitle="Upload chart images for review">
+      <Section number={4} title={t("section4Title")} subtitle={t("section4Subtitle")}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
-          {[
-            { type: "before_entry", label: "Before Entry", icon: "📷" },
-            { type: "after_exit", label: "After Exit", icon: "📸" },
-            { type: "higher_timeframe", label: "HTF Analysis", icon: "🔭" },
-          ].map((slot) => (
+          {SCREENSHOT_SLOTS.map((slot) => (
             <ScreenshotSlot
               key={slot.type}
               type={slot.type}
-              label={slot.label}
+              label={t(slot.labelKey)}
               icon={slot.icon}
+              uploadLabel={t("clickToUpload")}
               preview={previews[slot.type]}
               onChange={(file) => handleScreenshot(slot.type, file)}
             />
@@ -447,14 +456,14 @@ export default function NewTradeForm() {
           {pending ? (
             <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <Spinner />
-              Saving trade…
+              {t("savingTrade")}
             </span>
           ) : (
-            "Save Trade"
+            t("saveTrade")
           )}
         </button>
         <a href="/trades" className="btn btn-secondary btn-lg">
-          Cancel
+          {t("cancel")}
         </a>
       </div>
 
@@ -559,12 +568,14 @@ function ScreenshotSlot({
   type,
   label,
   icon,
+  uploadLabel,
   preview,
   onChange,
 }: {
   type: string;
   label: string;
   icon: string;
+  uploadLabel: string;
   preview?: string;
   onChange: (file: File | null) => void;
 }) {
@@ -623,7 +634,7 @@ function ScreenshotSlot({
               <path d="M4 16l4-4 4 4 4-6 4 6" strokeLinecap="round" strokeLinejoin="round" />
               <rect x="3" y="3" width="18" height="18" rx="3" />
             </svg>
-            <span style={{ fontSize: 11 }}>Click to upload</span>
+            <span style={{ fontSize: 11 }}>{uploadLabel}</span>
           </div>
         )}
       </label>

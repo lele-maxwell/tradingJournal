@@ -300,7 +300,10 @@
       "revenge": "😤 Revenge trading",
       "emotional": "😰 Emotional",
       "distracted": "🙃 Distracted"
-    }
+    },
+    "saveTrade": "Save Trade",
+    "savingTrade": "Saving trade…",
+    "cancel": "Cancel"
   },
   "reports": {
     "weeklyTitle": "Weekly Report",

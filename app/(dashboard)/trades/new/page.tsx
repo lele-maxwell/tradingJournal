@@ -1,12 +1,15 @@
 import type { Metadata } from "next";
 import NewTradeForm from "@/components/trades/NewTradeForm";
+import { getTranslations } from "next-intl/server";
 
-export const metadata: Metadata = {
-  title: "New Trade",
-  description: "Log a new trade in MaxStrat",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("newTrade");
+  return { title: t("title"), description: t("subtitle") };
+}
 
-export default function NewTradePage() {
+export default async function NewTradePage() {
+  const t = await getTranslations("newTrade");
+
   return (
     <div style={{ maxWidth: 860, margin: "0 auto" }}>
       <div style={{ marginBottom: 28 }}>
@@ -19,10 +22,10 @@ export default function NewTradePage() {
             marginBottom: 4,
           }}
         >
-          New Trade
+          {t("title")}
         </h1>
         <p style={{ fontSize: 14, color: "var(--text-muted)" }}>
-          Validate your setup, record your execution, and track your psychology.
+          {t("subtitle")}
         </p>
       </div>
       <NewTradeForm />
