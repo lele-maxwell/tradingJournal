@@ -2,8 +2,12 @@ import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/auth";
 import Link from "next/link";
+import { getTranslations } from "next-intl/server";
 
-export const metadata: Metadata = { title: "Trade History" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("trades");
+  return { title: t("title") };
+}
 
 function formatPL(value: number | null) {
   if (value === null) return "—";
@@ -18,6 +22,9 @@ export default async function TradesPage({
 }) {
   const user = await getUser();
   if (!user) return null;
+
+  const t = await getTranslations();
+  const tTrades = await getTranslations("trades");
 
   const params = await searchParams;
   const q = params.q?.toLowerCase() ?? "";
@@ -36,11 +43,11 @@ export default async function TradesPage({
 
   // Filter outcome client-side (derived field)
   const filtered = outcome
-    ? trades.filter((t) => {
-        const pl = t.profitLoss ?? 0;
+    ? trades.filter((tr) => {
+        const pl = tr.profitLoss ?? 0;
         if (outcome === "win") return pl > 0;
         if (outcome === "loss") return pl < 0;
-        if (outcome === "open") return t.exitTime === null;
+        if (outcome === "open") return tr.exitTime === null;
         return true;
       })
     : trades;
@@ -51,14 +58,14 @@ export default async function TradesPage({
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 700, color: "var(--text-primary)", letterSpacing: "-0.03em", marginBottom: 4 }}>
-            Trade History
+            {tTrades("title")}
           </h1>
           <p style={{ fontSize: 14, color: "var(--text-muted)" }}>
-            {filtered.length} trade{filtered.length !== 1 ? "s" : ""}
+            {tTrades("count", { count: filtered.length })}
           </p>
         </div>
         <Link href="/trades/new" className="btn btn-primary">
-          + New Trade
+          {t("common.newTrade")}
         </Link>
       </div>
 
@@ -77,24 +84,24 @@ export default async function TradesPage({
         <input
           name="q"
           defaultValue={q}
-          placeholder="Search pair or strategy…"
+          placeholder={tTrades("searchPlaceholder")}
           className="input"
           style={{ width: 220 }}
         />
         <select name="direction" defaultValue={direction} className="input" style={{ width: 140 }}>
-          <option value="">All directions</option>
-          <option value="buy">Buy / Long</option>
-          <option value="sell">Sell / Short</option>
+          <option value="">{tTrades("allDirections")}</option>
+          <option value="buy">{tTrades("buyLong")}</option>
+          <option value="sell">{tTrades("sellShort")}</option>
         </select>
         <select name="outcome" defaultValue={outcome} className="input" style={{ width: 130 }}>
-          <option value="">All outcomes</option>
-          <option value="win">Win</option>
-          <option value="loss">Loss</option>
-          <option value="open">Open</option>
+          <option value="">{tTrades("allOutcomes")}</option>
+          <option value="win">{t("common.win")}</option>
+          <option value="loss">{t("common.loss")}</option>
+          <option value="open">{t("common.open")}</option>
         </select>
-        <button type="submit" className="btn btn-secondary">Filter</button>
+        <button type="submit" className="btn btn-secondary">{tTrades("filter")}</button>
         {(q || direction || outcome) && (
-          <Link href="/trades" className="btn btn-ghost">Clear</Link>
+          <Link href="/trades" className="btn btn-ghost">{tTrades("clear")}</Link>
         )}
       </form>
 
@@ -111,10 +118,10 @@ export default async function TradesPage({
             fontSize: 14,
           }}
         >
-          {q || direction || outcome ? "No trades match your filters." : "No trades yet. "}
+          {q || direction || outcome ? tTrades("noTradesMatch") : tTrades("noTradesYet")}
           {!q && !direction && !outcome && (
             <Link href="/trades/new" style={{ color: "var(--accent)", textDecoration: "none" }}>
-              Log your first trade →
+              {tTrades("logFirstTrade")}
             </Link>
           )}
         </div>
@@ -137,42 +144,42 @@ export default async function TradesPage({
               textTransform: "uppercase",
             }}
           >
-            <span>Trade</span>
-            <span>Direction</span>
-            <span>Outcome</span>
-            <span style={{ textAlign: "right" }}>P/L</span>
-            <span style={{ textAlign: "right" }}>RR</span>
-            <span style={{ textAlign: "right" }}>Checklist</span>
+            <span>{tTrades("colTrade")}</span>
+            <span>{tTrades("colDirection")}</span>
+            <span>{tTrades("colOutcome")}</span>
+            <span style={{ textAlign: "right" }}>{tTrades("colPL")}</span>
+            <span style={{ textAlign: "right" }}>{tTrades("colRR")}</span>
+            <span style={{ textAlign: "right" }}>{tTrades("colChecklist")}</span>
           </div>
 
-          {filtered.map((t) => {
-            const pl = t.profitLoss ?? null;
+          {filtered.map((tr) => {
+            const pl = tr.profitLoss ?? null;
             const isWin = pl !== null && pl > 0;
             const isLoss = pl !== null && pl < 0;
             return (
               <Link
-                key={t.id}
-                href={`/trades/${t.id}`}
+                key={tr.id}
+                href={`/trades/${tr.id}`}
                 className="trade-row"
               >
                 <div>
                   <p style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>
-                    {t.pair}
+                    {tr.pair}
                   </p>
                   <p style={{ fontSize: 11, color: "var(--text-muted)" }}>
-                    {new Date(t.entryTime).toLocaleDateString("en-GB", {
+                    {new Date(tr.entryTime).toLocaleDateString("en-GB", {
                       day: "numeric",
                       month: "short",
                       year: "numeric",
                     })}
-                    {t.strategy ? ` · ${t.strategy}` : ""}
+                    {tr.strategy ? ` · ${tr.strategy}` : ""}
                   </p>
                 </div>
-                <span className={`badge ${t.direction === "buy" ? "badge-accent" : "badge-neutral"}`}>
-                  {t.direction === "buy" ? "Buy" : "Sell"}
+                <span className={`badge ${tr.direction === "buy" ? "badge-accent" : "badge-neutral"}`}>
+                  {tr.direction === "buy" ? t("common.buy") : t("common.sell")}
                 </span>
                 <span className={`badge ${isWin ? "badge-win" : isLoss ? "badge-loss" : "badge-neutral"}`}>
-                  {isWin ? "Win" : isLoss ? "Loss" : "Open"}
+                  {isWin ? t("common.win") : isLoss ? t("common.loss") : t("common.open")}
                 </span>
                 <span
                   style={{
@@ -185,10 +192,10 @@ export default async function TradesPage({
                   {formatPL(pl)}
                 </span>
                 <span style={{ textAlign: "right", fontSize: 13, color: "var(--text-secondary)" }}>
-                  {t.riskReward ? `${t.riskReward}` : "—"}
+                  {tr.riskReward ? `${tr.riskReward}` : "—"}
                 </span>
                 <span style={{ textAlign: "right", fontSize: 13, color: "var(--text-secondary)" }}>
-                  {t.checklist?.score ?? 0}/16
+                  {tr.checklist?.score ?? 0}/16
                 </span>
               </Link>
             );
