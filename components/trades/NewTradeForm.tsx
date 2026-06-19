@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState, useCallback } from "react";
+import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { createTradeAction, type TradeActionState } from "@/lib/actions/trade.actions";
 import { calcChecklistScore, calcRR } from "@/lib/validations/trade.schema";
@@ -462,9 +463,9 @@ export default function NewTradeForm() {
             t("saveTrade")
           )}
         </button>
-        <a href="/trades" className="btn btn-secondary btn-lg">
+        <Link href="/trades" className="btn btn-secondary btn-lg">
           {t("cancel")}
-        </a>
+        </Link>
       </div>
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>

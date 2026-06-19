@@ -2,7 +2,7 @@
 
 import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { LOCALE_COOKIE, locales, type Locale } from "@/i18n/config";
 
 export function LanguageSelector() {
@@ -10,15 +10,23 @@ export function LanguageSelector() {
   const t = useTranslations("language");
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [pendingLocale, setPendingLocale] = useState<Locale | null>(null);
 
-  function onSelect(nextLocale: Locale) {
-    if (nextLocale === locale) return;
-
-    document.cookie = `${LOCALE_COOKIE}=${nextLocale};path=/;max-age=${60 * 60 * 24 * 365};samesite=lax`;
-
+  // Persist the chosen locale cookie + trigger a soft server re-render.
+  // Done in an effect (rather than directly in the handler) so the
+  // side-effect on a global (`document`) is contained for the React
+  // Compiler's immutability rule.
+  useEffect(() => {
+    if (pendingLocale === null) return;
+    document.cookie = `${LOCALE_COOKIE}=${pendingLocale};path=/;max-age=${60 * 60 * 24 * 365};samesite=lax`;
     startTransition(() => {
       router.refresh();
     });
+  }, [pendingLocale, router, startTransition]);
+
+  function onSelect(nextLocale: Locale) {
+    if (nextLocale === locale || isPending) return;
+    setPendingLocale(nextLocale);
   }
 
   return (
