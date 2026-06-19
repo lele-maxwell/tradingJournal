@@ -2,16 +2,19 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { Hero } from "@/components/landing/Hero";
 import { Features } from "@/components/landing/Features";
 import { Methodology } from "@/components/landing/Methodology";
 import { FolderIcon } from "@/components/icons/FolderIcon";
+import { LanguageSelector } from "@/components/LanguageSelector";
 import { createClient } from "@/lib/supabase/client";
 
 export default function LandingPage() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
+  const t = useTranslations("landing.nav");
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -42,18 +45,19 @@ export default function LandingPage() {
           </div>
           
           <nav className="hidden md:flex items-center gap-8">
-            <Link href="#features" className="text-sm text-text-secondary hover:text-accent transition-colors">Features</Link>
-            <Link href="#methodology" className="text-sm text-text-secondary hover:text-accent transition-colors">Methodology</Link>
-            <Link href="#pricing" className="text-sm text-text-secondary hover:text-accent transition-colors">Pricing</Link>
+            <Link href="#features" className="text-sm text-text-secondary hover:text-accent transition-colors">{t("features")}</Link>
+            <Link href="#methodology" className="text-sm text-text-secondary hover:text-accent transition-colors">{t("methodology")}</Link>
+            <Link href="#pricing" className="text-sm text-text-secondary hover:text-accent transition-colors">{t("pricing")}</Link>
           </nav>
 
           <div className="flex items-center gap-4">
+            <LanguageSelector />
             {loading ? (
               <div className="w-24 h-9 bg-white/5 animate-pulse rounded" />
             ) : user ? (
               <div className="flex items-center gap-6">
                 <Link href="/dashboard" className="text-sm font-medium text-text-secondary hover:text-white transition-colors">
-                  Dashboard
+                  {t("dashboard")}
                 </Link>
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-sm font-bold text-white shadow-sm ring-2 ring-white/10">
@@ -67,10 +71,10 @@ export default function LandingPage() {
             ) : (
               <>
                 <Link href="/login" className="text-sm font-medium text-text-secondary hover:text-white transition-colors">
-                  Login
+                  {t("login")}
                 </Link>
                 <Link href="/signup" className="btn btn-primary px-5 py-2 text-sm font-bold">
-                  Join MaxStrat
+                  {t("join")}
                 </Link>
               </>
             )}
