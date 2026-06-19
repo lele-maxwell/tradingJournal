@@ -1,9 +1,21 @@
+"use client";
+
+import { useTranslations } from "next-intl";
+
+type Step = {
+  id: string;
+  labelKey: "step01Label" | "step02Label" | "step03Label" | "step04Label";
+  detailKey: "step01Detail" | "step02Detail" | "step03Detail" | "step04Detail";
+};
+
 export function Methodology() {
-  const steps = [
-    { id: "01", label: "LOG_ENTRY", detail: "Capture setup, conviction, and mental state in real-time." },
-    { id: "02", label: "VALIDATE_EDGE", detail: "Automated checklist ensures confluence with the MaxStrat edge." },
-    { id: "03", label: "TRACK_EXECUTION", detail: "Screenshots and R/R tracking for precise post-trade review." },
-    { id: "04", label: "MASTER_PSYCH", detail: "Identify emotional leaks and refine your discipline over time." }
+  const t = useTranslations("landing.methodology");
+
+  const steps: Step[] = [
+    { id: "01", labelKey: "step01Label", detailKey: "step01Detail" },
+    { id: "02", labelKey: "step02Label", detailKey: "step02Detail" },
+    { id: "03", labelKey: "step03Label", detailKey: "step03Detail" },
+    { id: "04", labelKey: "step04Label", detailKey: "step04Detail" },
   ];
 
   return (
@@ -26,12 +38,12 @@ export function Methodology() {
                 <span className="folder-name">MAXSTRAT_CORE</span>
               </div>
               <div className="tree-lines">
-                {steps.map((s, i) => (
-                  <div key={i} className="tree-item">
+                {steps.map((s) => (
+                  <div key={s.id} className="tree-item">
                     <span className="step-id">{s.id}</span>
-                    <span className="step-label">{s.label}</span>
+                    <span className="step-label">{t(s.labelKey)}</span>
                     <span className="step-dash">—</span>
-                    <span className="step-detail">{s.detail}</span>
+                    <span className="step-detail">{t(s.detailKey)}</span>
                   </div>
                 ))}
               </div>
