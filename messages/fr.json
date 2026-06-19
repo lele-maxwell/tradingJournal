@@ -350,5 +350,10 @@
     "mustBePositive": "Doit être positif",
     "mustBeNonNegative": "Ne doit pas être négatif",
     "riskPercentMax": "Le risque % ne peut pas dépasser 100"
+  },
+  "meta": {
+    "appName": "MaxStrat",
+    "titleTemplate": "%s | MaxStrat",
+    "description": "Un journal structuré de discipline et de performance de trading. Validez vos setups, suivez votre psychologie et passez en revue votre régularité."
   }
 }
