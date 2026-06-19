@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { getTranslations } from "next-intl/server";
 import { tradeSchema, calcChecklistScore, calcRR } from "@/lib/validations/trade.schema";
 
 export type TradeActionState = {
@@ -16,8 +17,10 @@ export async function createTradeAction(
   prevState: TradeActionState,
   formData: FormData
 ): Promise<TradeActionState> {
+  const t = await getTranslations("errors");
+
   const user = await getUser();
-  if (!user) return { error: "Unauthorized" };
+  if (!user) return { error: t("unauthorized") };
 
   // Parse raw form data
   const raw = {
@@ -65,7 +68,14 @@ export async function createTradeAction(
 
   const parsed = tradeSchema.safeParse(raw);
   if (!parsed.success) {
-    return { fieldErrors: parsed.error.flatten().fieldErrors as Record<string, string[]> };
+    const rawFieldErrors = parsed.error.flatten().fieldErrors as Record<string, string[]>;
+    const fieldErrors: Record<string, string[]> = {};
+    for (const [field, messages] of Object.entries(rawFieldErrors)) {
+      fieldErrors[field] = (messages ?? []).map((msg) =>
+        msg.includes(".") ? t.has(msg as never) ? t(msg as never) : msg : msg
+      );
+    }
+    return { fieldErrors };
   }
 
   const data = parsed.data;

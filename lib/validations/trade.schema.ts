@@ -2,22 +2,22 @@ import { z } from "zod";
 
 export const tradeSchema = z.object({
   // General
-  pair: z.string().min(1, "Asset/Pair is required"),
-  direction: z.enum(["buy", "sell"], { message: "Direction must be buy or sell" }),
+  pair: z.string().min(1, "errors.pairRequired"),
+  direction: z.enum(["buy", "sell"], { message: "errors.directionInvalid" }),
   strategy: z.string().optional(),
 
   // Entry & Exit
-  entryPrice: z.coerce.number({ message: "Entry price is required" }).positive("Must be positive"),
-  exitPrice: z.coerce.number().positive("Must be positive").optional().or(z.literal("")),
-  stopLoss: z.coerce.number({ message: "Stop loss is required" }).positive("Must be positive"),
-  takeProfit: z.coerce.number({ message: "Take profit is required" }).positive("Must be positive"),
+  entryPrice: z.coerce.number({ message: "errors.entryPriceRequired" }).positive("errors.mustBePositive"),
+  exitPrice: z.coerce.number().positive("errors.mustBePositive").optional().or(z.literal("")),
+  stopLoss: z.coerce.number({ message: "errors.stopLossRequired" }).positive("errors.mustBePositive"),
+  takeProfit: z.coerce.number({ message: "errors.takeProfitRequired" }).positive("errors.mustBePositive"),
 
   // Risk
-  positionSize: z.coerce.number().nonnegative().optional().or(z.literal("")),
-  riskPercent: z.coerce.number().nonnegative().max(100).optional().or(z.literal("")),
+  positionSize: z.coerce.number().nonnegative("errors.mustBeNonNegative").optional().or(z.literal("")),
+  riskPercent: z.coerce.number().nonnegative("errors.mustBeNonNegative").max(100, "errors.riskPercentMax").optional().or(z.literal("")),
 
   // Timing
-  entryTime: z.string().min(1, "Entry time is required"),
+  entryTime: z.string().min(1, "errors.entryTimeRequired"),
   exitTime: z.string().optional(),
   entryTf: z.string().optional(),
   higherTf: z.string().optional(),
