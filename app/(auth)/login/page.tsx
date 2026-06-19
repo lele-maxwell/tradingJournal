@@ -2,12 +2,15 @@
 
 import { useActionState } from "react";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { loginAction, type AuthState } from "@/lib/actions/auth.actions";
+import { LanguageSelector } from "@/components/LanguageSelector";
 
 const initialState: AuthState = {};
 
 export default function LoginPage() {
   const [state, action, pending] = useActionState(loginAction, initialState);
+  const t = useTranslations("auth.login");
 
   return (
     <div
@@ -21,6 +24,11 @@ export default function LoginPage() {
       }}
     >
       <div style={{ width: "100%", maxWidth: 380 }}>
+        {/* Language */}
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 20 }}>
+          <LanguageSelector />
+        </div>
+
         {/* Logo */}
         <div style={{ textAlign: "center", marginBottom: 36 }}>
           <div
@@ -49,10 +57,10 @@ export default function LoginPage() {
               marginBottom: 6,
             }}
           >
-            Welcome back
+            {t("title")}
           </h1>
           <p style={{ fontSize: 14, color: "var(--text-muted)" }}>
-            Sign in to your MaxStrat
+            {t("subtitle")}
           </p>
         </div>
 
@@ -60,27 +68,27 @@ export default function LoginPage() {
         <div className="card">
           <form action={action} style={{ display: "flex", flexDirection: "column", gap: 18 }}>
             <div>
-              <label htmlFor="email">Email</label>
+              <label htmlFor="email">{t("email")}</label>
               <input
                 id="email"
                 name="email"
                 type="email"
                 autoComplete="email"
                 required
-                placeholder="you@example.com"
+                placeholder={t("emailPlaceholder")}
                 className={`input ${state.error ? "input-error" : ""}`}
               />
             </div>
 
             <div>
-              <label htmlFor="password">Password</label>
+              <label htmlFor="password">{t("password")}</label>
               <input
                 id="password"
                 name="password"
                 type="password"
                 autoComplete="current-password"
                 required
-                placeholder="••••••••"
+                placeholder={t("passwordPlaceholder")}
                 className={`input ${state.error ? "input-error" : ""}`}
               />
             </div>
@@ -119,10 +127,10 @@ export default function LoginPage() {
                       display: "inline-block",
                     }}
                   />
-                  Signing in…
+                  {t("submitting")}
                 </span>
               ) : (
-                "Sign in"
+                t("submit")
               )}
             </button>
           </form>
@@ -136,12 +144,12 @@ export default function LoginPage() {
             color: "var(--text-muted)",
           }}
         >
-          Don&apos;t have an account?{" "}
+          {t("noAccount")}{" "}
           <Link
             href="/signup"
             style={{ color: "var(--accent)", textDecoration: "none", fontWeight: 500 }}
           >
-            Create one
+            {t("createOne")}
           </Link>
         </p>
       </div>
