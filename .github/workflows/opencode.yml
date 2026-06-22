@@ -12,7 +12,7 @@
 # For custom OpenAI-compatible providers, set:
 # - GRAPHIFY_LLM_PROVIDER: JSON config like {"name":"kivoyo","base_url":"https://...","model":"gpt-4"}
 # - GRAPHIFY_LLM_API_KEY: Your API key
-name: opencode
+name: graphify-review
 
 on:
   pull_request:
@@ -24,16 +24,98 @@ on:
 
 # Cancel in-progress runs when a new run is triggered
 concurrency:
-  group: opencode-review-${{ github.event.pull_request.number || github.event.issue.number }}
+  group: graphify-review-${{ github.event.pull_request.number || github.event.issue.number }}
   cancel-in-progress: true
 
 jobs:
-  review:
-    # Only run if the audience variable is set (keeps unprepared forks green)
-    if: ${{ vars.OPENCODE_GATEWAY_AUDIENCE != '' }}
+  # Job 1: Build the Graphify knowledge graph
+  build-graph:
+    runs-on: ubuntu-latest
+    outputs:
+      graph-ready: ${{ steps.build.outputs.success }}
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 📊 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: 📦 Install Graphify
+        run: |
+          pip install "graphifyy[mcp,pdf]"
+          graphify --version
+
+      - name: 🔧 Configure Graphify LLM Provider (Optional)
+        if: ${{ secrets.GRAPHIFY_LLM_PROVIDER != '' }}
+        env:
+          GRAPHIFY_PROVIDER_CONFIG: ${{ secrets.GRAPHIFY_LLM_PROVIDER }}
+        run: |
+          # Register custom LLM provider for graph enrichment
+          if [ -n "$GRAPHIFY_PROVIDER_CONFIG" ]; then
+            echo "$GRAPHIFY_PROVIDER_CONFIG" | python -c "
+          import sys, json
+          config = json.load(sys.stdin)
+          import subprocess
+          subprocess.run([
+            'graphify', 'provider', 'add', config['name'],
+            '--base-url', config['base_url'],
+            '--default-model', config['model'],
+            '--env-key', config['env_key']
+          ], check=True)
+            "
+            echo "✅ Configured custom LLM provider: $(echo $GRAPHIFY_PROVIDER_CONFIG | python -c 'import sys,json; print(json.load(sys.stdin)[\"name\"])')"
+          fi
+
+      - name: 🏗️ Build knowledge graph
+        id: build
+        env:
+          OPENAI_API_KEY: ${{ secrets.GRAPHIFY_LLM_API_KEY }}
+        run: |
+          # Build code-only graph (fast, no LLM needed)
+          # This extracts functions, classes, calls, imports using tree-sitter
+          graphify update .
+          
+          # Alternative: Build full graph with LLM enrichment (requires API key)
+          # This also processes docs, images, PDFs for semantic relationships
+          # graphify . --backend kivoyo
+          
+          if [ -f "graphify-out/graph.json" ]; then
+            echo "✅ Graph file created"
+            echo "success=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Graph file not found"
+            echo "success=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      - name: 📤 Upload graph artifact
+        if: steps.build.outputs.success == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: graphify-graph
+          path: graphify-out/graph.json
+          retention-days: 1
+
+      - name: 📋 Display graph stats
+        if: steps.build.outputs.success == 'true'
+        run: |
+          echo "📊 Graph statistics:"
+          graphify check-update || true
+          echo ""
+          echo "📁 Graph file size:"
+          ls -lh graphify-out/graph.json || echo "Not found"
+
+  # Job 2: Run OpenCode review with Graphify MCP integration
+  opencode-review:
+    needs: build-graph
+    if: ${{ vars.OPENCODE_GATEWAY_AUDIENCE != '' && needs.build-graph.outputs.graph-ready == 'true' }}
     
     # Use the reusable workflow from ADORSYS-GIS/ai-governance
-    # This handles OpenCode setup, LLM configuration, and PR comment posting
     uses: ADORSYS-GIS/ai-governance/.github/workflows/opencode-review.yml@a887e7622d0bec0acff4ce5975229845daa90767
     
     permissions:
@@ -44,92 +126,8 @@ jobs:
     
     with:
       audience: ${{ vars.OPENCODE_GATEWAY_AUDIENCE }}
-      
-      # Pre-steps to build the graph BEFORE OpenCode starts
-      # These run before the reusable workflow's main steps
-      pre-steps: |
-        - name: 📊 Set up Python
-          uses: actions/setup-python@v5
-          with:
-            python-version: '3.10'
-            cache: 'pip'
-        
-        - name: 📦 Install Graphify
-          run: |
-            pip install "graphifyy[mcp,pdf]"
-            graphify --version
-        
-        - name: 🔧 Configure Graphify LLM Provider (Optional)
-          if: ${{ secrets.GRAPHIFY_LLM_PROVIDER != '' }}
-          env:
-            GRAPHIFY_PROVIDER_CONFIG: ${{ secrets.GRAPHIFY_LLM_PROVIDER }}
-          run: |
-            # Register custom LLM provider for graph enrichment
-            if [ -n "$GRAPHIFY_PROVIDER_CONFIG" ]; then
-              echo "$GRAPHIFY_PROVIDER_CONFIG" | python -c "
-            import sys, json
-            config = json.load(sys.stdin)
-            import subprocess
-            subprocess.run([
-              'graphify', 'provider', 'add', config['name'],
-              '--base-url', config['base_url'],
-              '--default-model', config['model'],
-              '--env-key', config['env_key']
-            ], check=True)
-              "
-              echo "✅ Configured custom LLM provider: $(echo $GRAPHIFY_PROVIDER_CONFIG | python -c 'import sys,json; print(json.load(sys.stdin)[\"name\"])')"
-            fi
-        
-        - name: 🏗️ Build knowledge graph
-          env:
-            # For code-only extraction, no LLM key needed
-            # For full extraction with LLM enrichment, set:
-            # OPENAI_API_KEY: ${{ secrets.GRAPHIFY_LLM_API_KEY }}
-            # GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-            # Or use custom provider configured above
-            OPENAI_API_KEY: ${{ secrets.GRAPHIFY_LLM_API_KEY }}
-          run: |
-            # Build code-only graph (fast, no LLM needed)
-            # This extracts functions, classes, calls, imports using tree-sitter
-            graphify update .
-            
-            # Alternative: Build full graph with LLM enrichment (requires API key)
-            # This also processes docs, images, PDFs for semantic relationships
-            # graphify . --backend kivoyo
-            
-            echo "✅ Knowledge graph built at graphify-out/graph.json"
-        
-        - name: 📋 Verify graph
-          run: |
-            if [ -f "graphify-out/graph.json" ]; then
-              echo "✅ Graph file exists"
-              echo "📊 Graph stats:"
-              graphify check-update || true
-            else
-              echo "❌ Graph file not found"
-              exit 1
-            fi
-        
-        - name: 🔌 Install Graphify skill for OpenCode
-          run: |
-            graphify install --platform opencode
-            echo "✅ Graphify skill installed"
-        
-        - name: 📝 Display configuration
-          run: |
-            echo "📁 OpenCode configuration:"
-            cat .opencode/opencode.json || echo "No opencode.json found"
-            echo ""
-            echo "📁 Graphify skill:"
-            ls -la .opencode/plugins/ || echo "No plugins directory"
-
-# Note: The reusable workflow (opencode-review.yml) handles:
-# - Starting OpenCode with the configured MCP servers
-# - Loading the graphify-review.js skill
-# - Connecting to the LLM provider (via OPENCODE_GATEWAY_AUDIENCE)
-# - Running the skill on PR events
-# - Posting PR comments
-#
-# The MCP server (graphify-mcp) is started automatically by OpenCode
-# based on the configuration in .opencode/opencode.json.
-# Communication happens via stdin/stdout using JSON-RPC 2.0.
+      # Use the manual review model for /opencode comments
+      manual_model: "camer-digital/adorsys-reviewer-pro"
+      # Use the auto review model for PR events
+      auto_model: "camer-digital/adorsys-reviewer"
+      issue_model: "camer-digital/adorsys-reviewer-pro"
