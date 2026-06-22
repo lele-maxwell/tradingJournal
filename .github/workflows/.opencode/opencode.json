@@ -1,0 +1,32 @@
+{
+    "$schema": "https://opencode.ai/config.json",
+    "name": "graphiview",
+    "version": "1.0.0",
+    "description": "Pre-merge architectural review using Graphify knowledge graphs",
+    "plugins": [
+        ".opencode/plugins/graphify-review.js"
+    ],
+    "mcp": {
+        "graphify": {
+            "type": "local",
+            "command": [
+                "graphify-mcp",
+                "graphify-out/graph.json"
+            ],
+            "enabled": true,
+            "description": "Graphify MCP server for code knowledge graph analysis"
+        }
+    },
+    "graphifyReview": {
+        "riskThresholds": {
+            "low": 0.3,
+            "medium": 0.6,
+            "high": 1.0
+        },
+        "godNodeThreshold": 0.70,
+        "sprawlThreshold": 3,
+        "blastRadiusThreshold": 15,
+        "maxCyclesReport": 5,
+        "maxViolationsReport": 5
+    }
+}
