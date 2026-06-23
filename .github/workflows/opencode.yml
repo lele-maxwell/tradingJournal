@@ -7,19 +7,13 @@
 # Requirements:
 # - Set OPENCODE_GATEWAY_AUDIENCE variable (org-wide for ADORSYS-GIS)
 # - Optionally set GRAPHIFY_LLM_API_KEY secret for graph enrichment
-# - Optionally set GRAPHIFY_LLM_PROVIDER secret for custom LLM provider
 #
-# For custom OpenAI-compatible providers, set:
-# - GRAPHIFY_LLM_PROVIDER: JSON config like {"name":"kivoyo","base_url":"https://...","model":"gpt-4"}
-# - GRAPHIFY_LLM_API_KEY: Your API key
 name: graphify-review
 
 on:
   pull_request:
     types: [opened, synchronize, reopened]
   issue_comment:
-    types: [created]
-  pull_request_review_comment:
     types: [created]
 
 # Cancel in-progress runs when a new run is triggered
@@ -28,11 +22,15 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Job 1: Build the Graphify knowledge graph
-  build-graph:
+  review:
     runs-on: ubuntu-latest
-    outputs:
-      graph-ready: ${{ steps.build.outputs.success }}
+    timeout-minutes: 30
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: write
+      issues: write
+
     steps:
       - name: 📥 Checkout repository
         uses: actions/checkout@v4
@@ -50,40 +48,10 @@ jobs:
           pip install "graphifyy[mcp,pdf]"
           graphify --version
 
-      - name: 🔧 Configure Graphify LLM Provider (Optional)
-        if: ${{ secrets.GRAPHIFY_LLM_PROVIDER != '' }}
-        env:
-          GRAPHIFY_PROVIDER_CONFIG: ${{ secrets.GRAPHIFY_LLM_PROVIDER }}
-        run: |
-          # Register custom LLM provider for graph enrichment
-          if [ -n "$GRAPHIFY_PROVIDER_CONFIG" ]; then
-            echo "$GRAPHIFY_PROVIDER_CONFIG" | python -c "
-          import sys, json
-          config = json.load(sys.stdin)
-          import subprocess
-          subprocess.run([
-            'graphify', 'provider', 'add', config['name'],
-            '--base-url', config['base_url'],
-            '--default-model', config['model'],
-            '--env-key', config['env_key']
-          ], check=True)
-            "
-            echo "✅ Configured custom LLM provider: $(echo $GRAPHIFY_PROVIDER_CONFIG | python -c 'import sys,json; print(json.load(sys.stdin)[\"name\"])')"
-          fi
-
       - name: 🏗️ Build knowledge graph
-        id: build
-        env:
-          OPENAI_API_KEY: ${{ secrets.GRAPHIFY_LLM_API_KEY }}
+        id: build-graph
         run: |
-          # Build code-only graph (fast, no LLM needed)
-          # This extracts functions, classes, calls, imports using tree-sitter
           graphify update .
-          
-          # Alternative: Build full graph with LLM enrichment (requires API key)
-          # This also processes docs, images, PDFs for semantic relationships
-          # graphify . --backend kivoyo
-          
           if [ -f "graphify-out/graph.json" ]; then
             echo "✅ Graph file created"
             echo "success=true" >> $GITHUB_OUTPUT
@@ -93,41 +61,121 @@ jobs:
             exit 1
           fi
 
-      - name: 📤 Upload graph artifact
-        if: steps.build.outputs.success == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: graphify-graph
-          path: graphify-out/graph.json
-          retention-days: 1
-
-      - name: 📋 Display graph stats
-        if: steps.build.outputs.success == 'true'
+      - name: 📋 Graph stats
+        if: steps.build-graph.outputs.success == 'true'
         run: |
           echo "📊 Graph statistics:"
           graphify check-update || true
           echo ""
           echo "📁 Graph file size:"
-          ls -lh graphify-out/graph.json || echo "Not found"
+          ls -lh graphify-out/graph.json
 
-  # Job 2: Run OpenCode review with Graphify MCP integration
-  opencode-review:
-    needs: build-graph
-    if: ${{ vars.OPENCODE_GATEWAY_AUDIENCE != '' && needs.build-graph.outputs.graph-ready == 'true' }}
-    
-    # Use the reusable workflow from ADORSYS-GIS/ai-governance
-    uses: ADORSYS-GIS/ai-governance/.github/workflows/opencode-review.yml@a887e7622d0bec0acff4ce5975229845daa90767
-    
-    permissions:
-      id-token: write        # Mint the GHA OIDC token (gateway auth)
-      contents: write        # Checkout + git ops
-      pull-requests: write   # Post the review
-      issues: write          # Post issue-task / failure comments
-    
-    with:
-      audience: ${{ vars.OPENCODE_GATEWAY_AUDIENCE }}
-      # Use the manual review model for /opencode comments
-      manual_model: "camer-digital/adorsys-reviewer-pro"
-      # Use the auto review model for PR events
-      auto_model: "camer-digital/adorsys-reviewer"
-      issue_model: "camer-digital/adorsys-reviewer-pro"
+      - name: 🔌 Install OpenCode
+        run: |
+          # Install OpenCode CLI
+          npm install -g @opencode-ai/opencode
+          opencode --version
+
+      - name: 📝 Create OpenCode config
+        run: |
+          mkdir -p .opencode
+          cat > .opencode/opencode.json << 'EOF'
+          {
+            "$schema": "https://opencode.ai/config.json",
+            "mcp": {
+              "graphify": {
+                "type": "local",
+                "command": ["graphify-mcp", "graphify-out/graph.json"],
+                "enabled": true
+              }
+            }
+          }
+          EOF
+          echo "✅ OpenCode config created"
+
+      - name: 🔑 Setup OIDC authentication
+        if: ${{ vars.OPENCODE_GATEWAY_AUDIENCE != '' }}
+        uses: actions/github-script@v7
+        env:
+          AUDIENCE: ${{ vars.OPENCODE_GATEWAY_AUDIENCE }}
+        with:
+          script: |
+            const token = await core.getIDToken(process.env.AUDIENCE);
+            core.setSecret(token);
+            core.exportVariable('OPENAI_API_KEY', token);
+            core.exportVariable('OPENAI_BASE_URL', 'https://api.ai.camer.digital/v1');
+            console.log("✅ OIDC token obtained");
+
+      - name: 🤖 Run Graphify Review
+        if: ${{ steps.build-graph.outputs.success == 'true' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+          EVENT_NAME: ${{ github.event_name }}
+          COMMENT_BODY: ${{ github.event.comment.body || '' }}
+        run: |
+          # Determine if this is a manual trigger or auto
+          if [ "$EVENT_NAME" = "issue_comment" ]; then
+            # Check if comment matches trigger pattern
+            if echo "$COMMENT_BODY" | grep -qE '(^|[[:space:]])/(graphify|opencode|oc)\b'; then
+              echo "🔍 Manual review triggered"
+              TRIGGER_TYPE="manual"
+            else
+              echo "⏭️ Skipping - not a Graphify trigger"
+              exit 0
+            fi
+          else
+            echo "🔍 Auto review triggered"
+            TRIGGER_TYPE="auto"
+          fi
+
+          # Get changed files
+          CHANGED_FILES=$(gh pr view "$PR_NUMBER" --json files -q '.[].path' | tr '\n' ',' | sed 's/,$//')
+          echo "📁 Changed files: $CHANGED_FILES"
+
+          # Run OpenCode with Graphify MCP
+          opencode run --agent auto-review "
+          You are an architectural reviewer. Analyze this PR using Graphify MCP tools.
+
+          Changed files: $CHANGED_FILES
+
+          Steps:
+          1. Call mcp.tool('graphify', 'get_pr_impact', {files: ['$CHANGED_FILES'.split(',')].map(f => f.trim())})
+          2. Call mcp.tool('graphify', 'god_nodes', {limit: 10})
+          3. Call mcp.tool('graphify', 'graph_stats', {})
+          4. Call mcp.tool('graphify', 'detect_cycles', {})
+          5. Call mcp.tool('graphify', 'get_community', {files: ['$CHANGED_FILES'.split(',')].map(f => f.trim())})
+
+          Then generate a concise architectural review comment in this format:
+
+          ## 📊 GraphiView Architectural Review
+
+          **Overall risk:** 🟢 LOW | 🟡 MEDIUM | 🔴 HIGH
+
+          ### Key Findings
+          - Blast radius: X nodes affected
+          - God nodes modified: Y
+          - Communities touched: Z
+          - New circular dependencies: N
+          - Layering violations: M
+
+          ### Recommendations
+          - [Specific actionable items]
+
+          ---
+          *Generated by [GraphiView](https://github.com/lele-maxwell/graphiview)*
+          "
+
+      - name: 💬 Post PR Comment
+        if: ${{ failure() || success() }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+        run: |
+          # Check if we already posted a comment (avoid duplicates)
+          EXISTING=$(gh pr view "$PR_NUMBER" --json comments -q '.comments[].body' 2>/dev/null | grep -c "GraphiView Architectural Review" || true)
+          if [ "$EXISTING" -eq 0 ]; then
+            echo "📝 No existing GraphiView comment found"
+          else
+            echo "✅ GraphiView comment already exists"
+          fi
