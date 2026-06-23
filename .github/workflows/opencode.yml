@@ -118,15 +118,8 @@ jobs:
 
       - name: Install OpenCode
         run: |
-          npm install -g opencode-ai 2>/dev/null || npm install -g @anthropic-ai/opencode 2>/dev/null || {
-            echo "⚠️ OpenCode npm install failed, trying pip..."
-            pip install opencode-ai 2>/dev/null || pip install opencode 2>/dev/null || {
-              echo "❌ Could not install OpenCode, using fallback..."
-              # Fallback: use the system opencode if available
-              which opencode && echo "Using system opencode" || echo "No opencode available"
-            }
-          }
-          opencode --version 2>/dev/null || echo "OpenCode version check skipped"
+          npm install -g opencode-ai
+          opencode --version
 
       - name: Set up Python (for Graphify MCP)
         uses: actions/setup-python@v5
