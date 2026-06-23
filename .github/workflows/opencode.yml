@@ -33,6 +33,9 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
+    outputs:
+      success: ${{ steps.build-graph-step.outputs.success }}
+      node_count: ${{ steps.build-graph-step.outputs.node_count }}
 
     steps:
       - name: Checkout repository
@@ -58,7 +61,7 @@ jobs:
           graphify --version
 
       - name: Build knowledge graph
-        id: build-graph
+        id: build-graph-step
         env:
           GRAPHIFY_LLM_API_KEY: ${{ secrets.GRAPHIFY_LLM_API_KEY }}
           GRAPHIFY_LLM_BASE_URL: ${{ secrets.GRAPHIFY_LLM_BASE_URL }}
@@ -78,7 +81,7 @@ jobs:
           fi
 
       - name: Upload graph artifact
-        if: steps.build-graph.outputs.success == 'true'
+        if: steps.build-graph-step.outputs.success == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: graphify-graph
@@ -90,7 +93,7 @@ jobs:
   # ============================================================
   opencode-review:
     needs: build-graph
-    if: needs.build-graph.outputs.success == 'true'
+    if: needs.build-graph.outputs.success == 'true' || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
