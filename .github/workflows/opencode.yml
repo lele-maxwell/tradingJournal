@@ -229,6 +229,16 @@ jobs:
             exit 1
           fi
 
+          # Configure OpenCode authentication
+          # OpenCode uses the camer-digital gateway, so we need to set up auth
+          if [ -n "$OPENAI_API_KEY" ] && [ "$OPENAI_API_KEY" != "null" ]; then
+            echo "Configuring OpenCode with API key..."
+            opencode providers add camer-digital --api-key "$OPENAI_API_KEY" 2>/dev/null || true
+            if [ -n "$OPENAI_BASE_URL" ] && [ "$OPENAI_BASE_URL" != "null" ]; then
+              opencode providers update camer-digital --base-url "$OPENAI_BASE_URL" 2>/dev/null || true
+            fi
+          fi
+
           # Build the review prompt
           PROMPT="You are a senior software architect reviewing PR #$PR_NUMBER in $REPOSITORY.
 
