@@ -67,15 +67,15 @@ jobs:
           GRAPHIFY_LLM_BASE_URL: ${{ secrets.GRAPHIFY_LLM_BASE_URL }}
           GRAPHIFY_LLM_MODEL: ${{ secrets.GRAPHIFY_LLM_MODEL }}
         run: |
-          echo "🏗️ Building knowledge graph..."
+          echo "Building knowledge graph..."
           graphify update .
           if [ -f "graphify-out/graph.json" ]; then
             NODE_COUNT=$(python3 -c "import json; g=json.load(open('graphify-out/graph.json')); print(len(g.get('nodes', [])))" 2>/dev/null || echo "unknown")
-            echo "✅ Graph built with $NODE_COUNT nodes"
+            echo "Graph built with $NODE_COUNT nodes"
             echo "success=true" >> $GITHUB_OUTPUT
             echo "node_count=$NODE_COUNT" >> $GITHUB_OUTPUT
           else
-            echo "❌ Graph file not found"
+            echo "Graph file not found"
             echo "success=false" >> $GITHUB_OUTPUT
             exit 1
           fi
@@ -132,7 +132,7 @@ jobs:
       - name: Install Graphify MCP
         run: |
           pip install "graphifyy[mcp,pdf]"
-          graphify-mcp --help >/dev/null 2>&1 && echo "✅ Graphify MCP installed" || echo "❌ Graphify MCP not found"
+          graphify-mcp --help >/dev/null 2>&1 && echo "Graphify MCP installed" || echo "Graphify MCP not found"
 
       - name: Configure OpenCode MCP
         run: |
@@ -149,7 +149,7 @@ jobs:
             }
           }
           OPENCODE_EOF
-          echo "✅ OpenCode MCP configuration created"
+          echo "OpenCode MCP configuration created"
 
       - name: Check for Graphify trigger
         id: check-trigger
@@ -160,15 +160,15 @@ jobs:
         run: |
           if [ "$EVENT_NAME" = "issue_comment" ]; then
             if echo "$COMMENT_BODY" | grep -qE '(^|[[:space:]])/(graphify|opencode|oc)\b'; then
-              echo "🔍 Manual review triggered by comment"
+              echo "Manual review triggered by comment"
               echo "triggered=true" >> $GITHUB_OUTPUT
             else
-              echo "⏭️ Skipping - not a Graphify trigger"
+              echo "Skipping - not a Graphify trigger"
               echo "triggered=false" >> $GITHUB_OUTPUT
               exit 0
             fi
           else
-            echo "🔍 Auto review triggered by PR event"
+            echo "Auto review triggered by PR event"
             echo "triggered=true" >> $GITHUB_OUTPUT
           fi
 
@@ -179,27 +179,25 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GATEWAY_AUDIENCE: ${{ vars.OPENCODE_GATEWAY_AUDIENCE }}
         run: |
-          echo "🔑 Exchanging GitHub OIDC token for AI Gateway API key..."
+          echo "Exchanging GitHub OIDC token for AI Gateway API key..."
           # Get the OIDC token from GitHub
           OIDC_RESPONSE=$(curl -s -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${GATEWAY_AUDIENCE}" 2>/dev/null || echo "")
           OIDC_TOKEN=$(echo "$OIDC_RESPONSE" | jq -r '.value' 2>/dev/null || echo "")
           if [ -z "$OIDC_TOKEN" ] || [ "$OIDC_TOKEN" = "null" ]; then
-            echo "⚠️ OIDC token exchange failed, using fallback API key"
-            echo "Raw response: ${OIDC_RESPONSE:0:200}"
+            echo "OIDC token exchange failed, using fallback API key"
             echo "api_key=fallback" >> $GITHUB_OUTPUT
           else
-            echo "✅ OIDC token obtained"
+            echo "OIDC token obtained"
             # Exchange OIDC token for gateway API key
             GATEWAY_RESPONSE=$(curl -s -X POST "$GATEWAY_AUDIENCE/auth/token" \
               -H "Content-Type: application/json" \
               -d "{\"token\": \"$OIDC_TOKEN\"}" 2>/dev/null || echo "")
             GATEWAY_API_KEY=$(echo "$GATEWAY_RESPONSE" | jq -r '.api_key // .access_token // .key' 2>/dev/null || echo "")
             if [ -z "$GATEWAY_API_KEY" ] || [ "$GATEWAY_API_KEY" = "null" ]; then
-              echo "⚠️ Gateway API key exchange failed, using fallback"
-              echo "Raw response: ${GATEWAY_RESPONSE:0:200}"
+              echo "Gateway API key exchange failed, using fallback"
               echo "api_key=fallback" >> $GITHUB_OUTPUT
             else
-              echo "✅ API key obtained from gateway"
+              echo "API key obtained from gateway"
               echo "api_key=$GATEWAY_API_KEY" >> $GITHUB_OUTPUT
             fi
           fi
@@ -221,10 +219,8 @@ jobs:
           # Google Gemini fallback
           GOOGLE_API_KEY: ${{ secrets.OPENCODE_LLM_API_KEY || steps.oidc-exchange.outputs.api_key || secrets.GOOGLE_API_KEY }}
         run: |
-          echo "🤖 Running OpenCode AI agent with Graphify MCP..."
-          echo "📋 PR: #$PR_NUMBER in $REPOSITORY"
-          echo "🔌 AI Provider: ${OPENAI_BASE_URL:-'default'}"
-          echo "📊 Model: ${OPENAI_MODEL:-'auto-detect'}"
+          echo "Running OpenCode AI agent with Graphify MCP..."
+          echo "PR: #$PR_NUMBER in $REPOSITORY"
 
           # Build the review prompt
           PROMPT="You are a senior software architect reviewing PR #$PR_NUMBER in $REPOSITORY.
@@ -247,68 +243,65 @@ jobs:
 
           # Run OpenCode with the review prompt using JSON format for reliable parsing
           # The MCP server will be started automatically from .opencode/opencode.json
-          echo "📝 Running OpenCode with prompt..."
+          echo "Running OpenCode with prompt..."
           # Use model from secret or default to a known good model
           MODEL="${OPENAI_MODEL:-camer-digital/qwen3p6-plus}"
-          echo "📊 Using model: $MODEL"
+          echo "Using model: $MODEL"
           opencode run --format json --model "$MODEL" "$PROMPT" > /tmp/opencode-output.json 2>/tmp/opencode-stderr.txt
           OPENCODE_EXIT=$?
           echo "OpenCode exited with: $OPENCODE_EXIT"
 
-          # Extract the review comment from JSON output
-          # OpenCode JSON events have type "assistant" with content field
-          REVIEW_COMMENT=$(python3 << 'PYTHON_EOF'
-import json
-import sys
+          # Extract the review comment from JSON output using a separate Python script file
+          # This avoids YAML heredoc issues
+          cat > /tmp/parse_output.py << 'PYEOF'
+          import json
+          import sys
 
-try:
-    with open('/tmp/opencode-output.json', 'r') as f:
-        content = f.read()
-    
-    # Parse JSON lines
-    assistant_messages = []
-    for line in content.strip().split('\n'):
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            event = json.loads(line)
-            if event.get('type') == 'assistant':
-                # Extract content from assistant message
-                msg_content = event.get('content', '')
-                if msg_content:
-                    assistant_messages.append(msg_content)
-        except json.JSONDecodeError:
-            # If line is not valid JSON, might be plain text output
-            if line and not line.startswith('['):
-                assistant_messages.append(line)
-    
-    if assistant_messages:
-        # Join all assistant messages
-        print('\n\n'.join(assistant_messages))
-    else:
-        # Fallback: try to read stderr or raw output
-        print("No assistant message found in JSON output")
-        sys.exit(1)
-except Exception as e:
-    print(f"Error parsing output: {str(e)}")
-    sys.exit(1)
-PYTHON_EOF
-          ) || REVIEW_COMMENT=""
+          try:
+              with open('/tmp/opencode-output.json', 'r') as f:
+                  content = f.read()
+
+              # Parse JSON lines
+              assistant_messages = []
+              for line in content.strip().split('\n'):
+                  line = line.strip()
+                  if not line:
+                      continue
+                  try:
+                      event = json.loads(line)
+                      if event.get('type') == 'assistant':
+                          msg_content = event.get('content', '')
+                          if msg_content:
+                              assistant_messages.append(msg_content)
+                  except json.JSONDecodeError:
+                      if line and not line.startswith('['):
+                          assistant_messages.append(line)
+
+              if assistant_messages:
+                  print('\n\n'.join(assistant_messages))
+              else:
+                  print("No assistant message found in JSON output")
+                  sys.exit(1)
+          except Exception as e:
+              print(f"Error parsing output: {str(e)}")
+              sys.exit(1)
+          PYEOF
+
+          REVIEW_COMMENT=$(python3 /tmp/parse_output.py) || REVIEW_COMMENT=""
 
           # Final fallback
           if [ -z "$REVIEW_COMMENT" ] || [ "$REVIEW_COMMENT" = "No assistant message found in JSON output" ]; then
             REVIEW_COMMENT="## Graphify MCP Analysis Complete
 
-Status: Analysis completed but output parsing encountered issues.
+          Status: Analysis completed but output parsing encountered issues.
 
-### Next Steps
-- Check workflow logs for detailed OpenCode output
-- Verify MCP server connected properly
-- Ensure LLM API key is configured
+          ### Next Steps
+          - Check workflow logs for detailed OpenCode output
+          - Verify MCP server connected properly
+          - Ensure LLM API key is configured
 
----
-*Generated by [GraphiView](https://github.com/lele-maxwell/graphiview)*"
+          ---
+          *Generated by [GraphiView](https://github.com/lele-maxwell/graphiview)*"
           fi
 
           # Save for next step
@@ -326,13 +319,13 @@ Status: Analysis completed but output parsing encountered issues.
           # Check if we already posted a comment
           EXISTING=$(gh pr view "$PR_NUMBER" --json comments -q '.comments[].body' 2>/dev/null | grep -c "Graphify MCP Review" || true)
           if [ "$EXISTING" -gt 0 ]; then
-            echo "✅ Graphify review comment already exists, skipping"
+            echo "Graphify review comment already exists, skipping"
             exit 0
           fi
 
           # Post the AI-generated review comment
           echo "$REVIEW_COMMENT" | gh pr comment "$PR_NUMBER" --body-file -
-          echo "✅ Review comment posted to PR #$PR_NUMBER"
+          echo "Review comment posted to PR #$PR_NUMBER"
 
       - name: Fallback - Post basic analysis if AI fails
         if: failure() && steps.check-trigger.outputs.triggered == 'true'
@@ -343,9 +336,9 @@ Status: Analysis completed but output parsing encountered issues.
         run: |
           # Post a basic comment if AI review failed
           cat << EOF > /tmp/fallback-comment.md
-          ## 📊 Graphify Basic Analysis
+          ## Graphify Basic Analysis
 
-          ⚠️ **AI review failed** - posting basic graph analysis
+          AI review failed - posting basic graph analysis
 
           - **Graph nodes:** $NODE_COUNT
           - **Graph file:** graphify-out/graph.json
@@ -354,11 +347,11 @@ Status: Analysis completed but output parsing encountered issues.
           ### Next Steps
           - Check workflow logs for AI agent errors
           - Verify API keys are configured for your AI provider
-          - Try running \`/graphify review\` again after fixing issues
+          - Try running /graphify review again after fixing issues
 
           ---
           *Generated by [GraphiView](https://github.com/lele-maxwell/graphiview)*
           EOF
 
-          gh pr comment "$PR_NUMBER" --body-file /tmp/fallback-comment.md 2>/dev/null || echo "⚠️ Could not post fallback comment"
-          echo "✅ Fallback comment posted"
+          gh pr comment "$PR_NUMBER" --body-file /tmp/fallback-comment.md 2>/dev/null || echo "Could not post fallback comment"
+          echo "Fallback comment posted"
