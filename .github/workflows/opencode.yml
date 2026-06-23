@@ -181,17 +181,22 @@ jobs:
         run: |
           echo "🔑 Exchanging GitHub OIDC token for AI Gateway API key..."
           # Get the OIDC token from GitHub
-          OIDC_TOKEN=$(curl -s -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${GATEWAY_AUDIENCE}" | jq -r '.value')
+          OIDC_RESPONSE=$(curl -s -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${GATEWAY_AUDIENCE}" 2>/dev/null || echo "")
+          OIDC_TOKEN=$(echo "$OIDC_RESPONSE" | jq -r '.value' 2>/dev/null || echo "")
           if [ -z "$OIDC_TOKEN" ] || [ "$OIDC_TOKEN" = "null" ]; then
             echo "⚠️ OIDC token exchange failed, using fallback API key"
+            echo "Raw response: ${OIDC_RESPONSE:0:200}"
             echo "api_key=fallback" >> $GITHUB_OUTPUT
           else
+            echo "✅ OIDC token obtained"
             # Exchange OIDC token for gateway API key
-            GATEWAY_API_KEY=$(curl -s -X POST "$GATEWAY_AUDIENCE/auth/token" \
+            GATEWAY_RESPONSE=$(curl -s -X POST "$GATEWAY_AUDIENCE/auth/token" \
               -H "Content-Type: application/json" \
-              -d "{\"token\": \"$OIDC_TOKEN\"}" | jq -r '.api_key // .access_token // .key')
+              -d "{\"token\": \"$OIDC_TOKEN\"}" 2>/dev/null || echo "")
+            GATEWAY_API_KEY=$(echo "$GATEWAY_RESPONSE" | jq -r '.api_key // .access_token // .key' 2>/dev/null || echo "")
             if [ -z "$GATEWAY_API_KEY" ] || [ "$GATEWAY_API_KEY" = "null" ]; then
               echo "⚠️ Gateway API key exchange failed, using fallback"
+              echo "Raw response: ${GATEWAY_RESPONSE:0:200}"
               echo "api_key=fallback" >> $GITHUB_OUTPUT
             else
               echo "✅ API key obtained from gateway"
