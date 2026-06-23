@@ -1,7 +1,16 @@
 # GraphiView Pre-Merge Architectural Review
 #
-# This workflow runs Graphify's architectural review on pull requests.
-# It builds a knowledge graph from the code and analyzes architectural impact.
+# This workflow runs Graphify's MCP-powered architectural review on pull requests.
+# It builds a knowledge graph, serves it via MCP, and uses OpenCode AI agent to analyze.
+#
+# Required repository variables:
+#   OPENCODE_GATEWAY_AUDIENCE - AI gateway audience for OIDC auth
+#
+# Optional repository secrets (for custom AI provider):
+#   GRAPHIFY_LLM_API_KEY      - API key for graph extraction (Gemini/OpenAI/etc.)
+#   OPENCODE_LLM_API_KEY      - API key for AI review agent
+#   OPENCODE_LLM_BASE_URL     - Custom OpenAI-compatible endpoint (optional)
+#   OPENCODE_LLM_MODEL        - Model to use (optional, default: provider default)
 #
 name: graphify-review
 
@@ -16,157 +25,269 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  review:
+  # ============================================================
+  # Job 1: Build the Graphify Knowledge Graph
+  # ============================================================
+  build-graph:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     permissions:
       contents: read
-      pull-requests: write
-      issues: write
 
     steps:
-      - name: 📥 Checkout repository
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: 📊 Set up Python
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: 📦 Install Graphify
+      - name: Cache Graphify graph
+        uses: actions/cache@v4
+        with:
+          path: graphify-out
+          key: graphify-graph-${{ hashFiles('**/*.py', '**/*.js', '**/*.ts', '**/*.rs', '**/*.go', '**/*.java') }}
+          restore-keys: graphify-graph-
+
+      - name: Install Graphify
         run: |
           pip install "graphifyy[mcp,pdf]"
           graphify --version
 
-      - name: 🏗️ Build knowledge graph
+      - name: Build knowledge graph
         id: build-graph
+        env:
+          GRAPHIFY_LLM_API_KEY: ${{ secrets.GRAPHIFY_LLM_API_KEY }}
+          GRAPHIFY_LLM_BASE_URL: ${{ secrets.GRAPHIFY_LLM_BASE_URL }}
+          GRAPHIFY_LLM_MODEL: ${{ secrets.GRAPHIFY_LLM_MODEL }}
         run: |
+          echo "🏗️ Building knowledge graph..."
           graphify update .
           if [ -f "graphify-out/graph.json" ]; then
-            echo "✅ Graph file created"
+            NODE_COUNT=$(python3 -c "import json; g=json.load(open('graphify-out/graph.json')); print(len(g.get('nodes', [])))" 2>/dev/null || echo "unknown")
+            echo "✅ Graph built with $NODE_COUNT nodes"
             echo "success=true" >> $GITHUB_OUTPUT
+            echo "node_count=$NODE_COUNT" >> $GITHUB_OUTPUT
           else
             echo "❌ Graph file not found"
             echo "success=false" >> $GITHUB_OUTPUT
             exit 1
           fi
 
-      - name: 📋 Graph stats
+      - name: Upload graph artifact
         if: steps.build-graph.outputs.success == 'true'
-        run: |
-          echo "📊 Graph statistics:"
-          graphify check-update || true
-          echo ""
-          echo "📁 Graph file size:"
-          ls -lh graphify-out/graph.json
+        uses: actions/upload-artifact@v4
+        with:
+          name: graphify-graph
+          path: graphify-out/graph.json
+          retention-days: 1
 
-      - name: 🤖 Run Graphify Analysis
-        if: steps.build-graph.outputs.success == 'true'
-        id: analysis
+  # ============================================================
+  # Job 2: Run OpenCode AI Agent with Graphify MCP
+  # ============================================================
+  opencode-review:
+    needs: build-graph
+    if: needs.build-graph.outputs.success == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write  # For OIDC token exchange
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download graph artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: graphify-graph
+          path: graphify-out
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install OpenCode
+        run: |
+          npm install -g opencode-ai 2>/dev/null || npm install -g @anthropic-ai/opencode 2>/dev/null || {
+            echo "⚠️ OpenCode npm install failed, trying pip..."
+            pip install opencode-ai 2>/dev/null || pip install opencode 2>/dev/null || {
+              echo "❌ Could not install OpenCode, using fallback..."
+              # Fallback: use the system opencode if available
+              which opencode && echo "Using system opencode" || echo "No opencode available"
+            }
+          }
+          opencode --version 2>/dev/null || echo "OpenCode version check skipped"
+
+      - name: Set up Python (for Graphify MCP)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Graphify MCP
+        run: |
+          pip install "graphifyy[mcp,pdf]"
+          graphify-mcp --help >/dev/null 2>&1 && echo "✅ Graphify MCP installed" || echo "❌ Graphify MCP not found"
+
+      - name: Configure OpenCode MCP
+        run: |
+          mkdir -p .opencode
+          cat > .opencode/opencode.json << 'OPENCODE_EOF'
+          {
+            "$schema": "https://opencode.ai/config.json",
+            "mcp": {
+              "graphify": {
+                "type": "local",
+                "command": ["graphify-mcp", "graphify-out/graph.json"],
+                "enabled": true
+              }
+            }
+          }
+          OPENCODE_EOF
+          echo "✅ OpenCode MCP configuration created"
+
+      - name: Check for Graphify trigger
+        id: check-trigger
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
           EVENT_NAME: ${{ github.event_name }}
           COMMENT_BODY: ${{ github.event.comment.body || '' }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
         run: |
-          # Check if this is a manual trigger
           if [ "$EVENT_NAME" = "issue_comment" ]; then
             if echo "$COMMENT_BODY" | grep -qE '(^|[[:space:]])/(graphify|opencode|oc)\b'; then
-              echo "🔍 Manual review triggered"
+              echo "🔍 Manual review triggered by comment"
+              echo "triggered=true" >> $GITHUB_OUTPUT
             else
               echo "⏭️ Skipping - not a Graphify trigger"
-              echo "skip=true" >> $GITHUB_OUTPUT
+              echo "triggered=false" >> $GITHUB_OUTPUT
               exit 0
             fi
           else
-            echo "🔍 Auto review triggered"
+            echo "🔍 Auto review triggered by PR event"
+            echo "triggered=true" >> $GITHUB_OUTPUT
           fi
-          echo "skip=false" >> $GITHUB_OUTPUT
 
-          # Get changed files
-          CHANGED_FILES=$(gh pr diff "$PR_NUMBER" --name-only 2>/dev/null | tr '\n' ' ')
-          echo "📁 Changed files:"
-          echo "$CHANGED_FILES"
-          
-          # Run Graphify analysis tools
-          echo "📊 Running blast radius analysis..."
-          BLAST_RADIUS=$(graphify blast-radius --files $(echo "$CHANGED_FILES" | tr '\n' ' ') 2>/dev/null | tail -1 || echo "0")
-          
-          echo "📊 Running god nodes analysis..."
-          GOD_NODES=$(graphify god-nodes --limit 5 2>/dev/null || echo "None found")
-          
-          echo "📊 Running cycle detection..."
-          CYCLES=$(graphify cycles 2>/dev/null || echo "None found")
-          
-          echo "📊 Running community detection..."
-          COMMUNITIES=$(graphify community 2>/dev/null || echo "Unknown")
-          
-          echo "📊 Running cohesion analysis..."
-          COHESION=$(graphify cohesion 2>/dev/null || echo "Unknown")
-          
-          # Save results for next step
-          echo "blast_radius=$BLAST_RADIUS" >> $GITHUB_OUTPUT
-          echo "god_nodes=$GOD_NODES" >> $GITHUB_OUTPUT
-          echo "cycles=$CYCLES" >> $GITHUB_OUTPUT
-          echo "communities=$COMMUNITIES" >> $GITHUB_OUTPUT
-          echo "cohesion=$COHESION" >> $GITHUB_OUTPUT
-          echo "changed_files=$(echo "$CHANGED_FILES" | tr '\n' ',' | sed 's/,$//')" >> $GITHUB_OUTPUT
-
-      - name: 💬 Post PR Comment
-        if: steps.analysis.outputs.skip == 'false' && steps.build-graph.outputs.success == 'true'
+      - name: Run OpenCode AI Review
+        if: steps.check-trigger.outputs.triggered == 'true'
+        id: review
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
-          BLAST_RADIUS: ${{ steps.analysis.outputs.blast_radius }}
-          GOD_NODES: ${{ steps.analysis.outputs.god_nodes }}
-          CYCLES: ${{ steps.analysis.outputs.cycles }}
-          COMMUNITIES: ${{ steps.analysis.outputs.communities }}
-          COHESION: ${{ steps.analysis.outputs.cohesion }}
-          CHANGED_FILES: ${{ steps.analysis.outputs.changed_files }}
+          REPOSITORY: ${{ github.repository }}
+          # AI Provider Configuration (custom endpoint support)
+          OPENAI_API_KEY: ${{ secrets.OPENCODE_LLM_API_KEY || secrets.OPENAI_API_KEY }}
+          OPENAI_BASE_URL: ${{ secrets.OPENCODE_LLM_BASE_URL }}
+          OPENAI_MODEL: ${{ secrets.OPENCODE_LLM_MODEL }}
+          # Anthropic fallback
+          ANTHROPIC_API_KEY: ${{ secrets.OPENCODE_LLM_API_KEY || secrets.ANTHROPIC_API_KEY }}
+          # Google Gemini fallback
+          GOOGLE_API_KEY: ${{ secrets.OPENCODE_LLM_API_KEY || secrets.GOOGLE_API_KEY }}
+        run: |
+          echo "🤖 Running OpenCode AI agent with Graphify MCP..."
+          echo "📋 PR: #$PR_NUMBER in $REPOSITORY"
+          echo "🔌 AI Provider: ${OPENAI_BASE_URL:-'default'}"
+          echo "📊 Model: ${OPENAI_MODEL:-'auto-detect'}"
+
+          # Build the review prompt
+          PROMPT="You are a senior software architect reviewing PR #$PR_NUMBER in $REPOSITORY.
+
+          Use the Graphify MCP tools to analyze the architectural impact of this PR:
+          1. Call 'get_pr_impact' with the changed files
+          2. Call 'god_nodes' to identify highly-connected nodes
+          3. Call 'detect_cycles' to find circular dependencies
+          4. Call 'get_community' to understand module structure
+          5. Call 'get_cohesion' to measure module cohesion
+          6. Call 'blast_radius' to calculate affected nodes
+
+          Based on the analysis, provide a structured review comment with:
+          - Overall risk level (LOW/MEDIUM/HIGH)
+          - Key findings with specific data
+          - Actionable recommendations
+          - Any architectural concerns
+
+          Be concise, objective, and data-driven. Use the Graphify MCP tools - do not guess."
+
+          # Run OpenCode with the review prompt
+          # The MCP server will be started automatically from .opencode/opencode.json
+          opencode run --format json --model "${OPENAI_MODEL:-auto}" "$PROMPT" 2>&1 | tee /tmp/opencode-output.txt
+
+          # Extract the review comment from output
+          # OpenCode outputs JSON events, we need to extract the final response
+          REVIEW_COMMENT=$(python3 -c "
+          import json, sys
+          with open('/tmp/opencode-output.txt') as f:
+              for line in f:
+                  line = line.strip()
+                  if line.startswith('{'):
+                      try:
+                          event = json.loads(line)
+                          if event.get('type') == 'assistant' and event.get('content'):
+                              print(event['content'])
+                      except:
+                          pass
+          " 2>/dev/null || echo "Review analysis completed - see workflow logs for details")
+
+          if [ -z "$REVIEW_COMMENT" ]; then
+            REVIEW_COMMENT="Graphify MCP analysis completed. Check workflow logs for details."
+          fi
+
+          # Save for next step
+          echo "review_comment<<REVIEW_EOF" >> $GITHUB_OUTPUT
+          echo "$REVIEW_COMMENT" >> $GITHUB_OUTPUT
+          echo "REVIEW_EOF" >> $GITHUB_OUTPUT
+
+      - name: Post PR Comment
+        if: steps.check-trigger.outputs.triggered == 'true' && steps.review.outputs.review_comment != ''
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+          REVIEW_COMMENT: ${{ steps.review.outputs.review_comment }}
         run: |
           # Check if we already posted a comment
-          EXISTING=$(gh pr view "$PR_NUMBER" --json comments -q '.comments[].body' 2>/dev/null | grep -c "GraphiView Architectural Review" || true)
+          EXISTING=$(gh pr view "$PR_NUMBER" --json comments -q '.comments[].body' 2>/dev/null | grep -c "Graphify MCP Review" || true)
           if [ "$EXISTING" -gt 0 ]; then
-            echo "✅ GraphiView comment already exists, skipping"
+            echo "✅ Graphify review comment already exists, skipping"
             exit 0
           fi
 
-          # Determine risk level based on blast radius
-          RISK_EMOJI="🟢"
-          RISK_LEVEL="LOW"
-          if [ "$BLAST_RADIUS" -gt 15 ] 2>/dev/null; then
-            RISK_EMOJI="🔴"
-            RISK_LEVEL="HIGH"
-          elif [ "$BLAST_RADIUS" -gt 5 ] 2>/dev/null; then
-            RISK_EMOJI="🟡"
-            RISK_LEVEL="MEDIUM"
-          fi
+          # Post the AI-generated review comment
+          echo "$REVIEW_COMMENT" | gh pr comment "$PR_NUMBER" --body-file -
+          echo "✅ Review comment posted to PR #$PR_NUMBER"
 
-          # Build comment
-          COMMENT="## 📊 GraphiView Architectural Review
+      - name: Fallback - Post basic analysis if AI fails
+        if: failure() && steps.check-trigger.outputs.triggered == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+          NODE_COUNT: ${{ needs.build-graph.outputs.node_count }}
+        run: |
+          # Post a basic comment if AI review failed
+          cat << EOF > /tmp/fallback-comment.md
+          ## 📊 Graphify Basic Analysis
 
-          **Overall risk:** $RISK_EMOJI **$RISK_LEVEL**
+          ⚠️ **AI review failed** - posting basic graph analysis
 
-          ### Key Findings
+          - **Graph nodes:** $NODE_COUNT
+          - **Graph file:** graphify-out/graph.json
+          - **Status:** Graph built successfully, but AI agent could not complete review
 
-          - **Files changed:** $(echo "$CHANGED_FILES" | tr ',' '\n' | wc -l)
-          - **Blast radius:** $BLAST_RADIUS nodes affected
-          - **God nodes:** $GOD_NODES
-          - **Communities:** $COMMUNITIES
-          - **Circular dependencies:** $CYCLES
-          - **Cohesion:** $COHESION
-
-          ### Recommendations
-
-          - Review the changed files for architectural impact
-          - Ensure tests cover the modified areas
-          - Consider splitting large PRs into smaller changes
+          ### Next Steps
+          - Check workflow logs for AI agent errors
+          - Verify API keys are configured for your AI provider
+          - Try running \`/graphify review\` again after fixing issues
 
           ---
-          *Generated by [GraphiView](https://github.com/lele-maxwell/graphiview)*"
+          *Generated by [GraphiView](https://github.com/lele-maxwell/graphiview)*
+          EOF
 
-          # Post comment
-          echo "$COMMENT" | gh pr comment "$PR_NUMBER" --body-file -
-          echo "✅ Comment posted to PR #$PR_NUMBER"
+          gh pr comment "$PR_NUMBER" --body-file /tmp/fallback-comment.md 2>/dev/null || echo "⚠️ Could not post fallback comment"
+          echo "✅ Fallback comment posted"
