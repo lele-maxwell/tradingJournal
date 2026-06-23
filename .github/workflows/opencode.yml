@@ -210,17 +210,24 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
           REPOSITORY: ${{ github.repository }}
           # AI Provider Configuration (custom endpoint support)
-          # Priority: 1. Explicit secret, 2. OIDC-exchanged key, 3. Fallback providers
-          OPENAI_API_KEY: ${{ secrets.OPENCODE_LLM_API_KEY || steps.oidc-exchange.outputs.api_key || secrets.OPENAI_API_KEY }}
+          # Priority: 1. Explicit secret, 2. OIDC-exchanged key (if not "fallback")
+          OPENAI_API_KEY: ${{ secrets.OPENCODE_LLM_API_KEY != '' && secrets.OPENCODE_LLM_API_KEY || (steps.oidc-exchange.outputs.api_key != 'fallback' && steps.oidc-exchange.outputs.api_key || '') }}
           OPENAI_BASE_URL: ${{ secrets.OPENCODE_LLM_BASE_URL }}
           OPENAI_MODEL: ${{ secrets.OPENCODE_LLM_MODEL }}
           # Anthropic fallback
-          ANTHROPIC_API_KEY: ${{ secrets.OPENCODE_LLM_API_KEY || steps.oidc-exchange.outputs.api_key || secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.OPENCODE_LLM_API_KEY != '' && secrets.OPENCODE_LLM_API_KEY || (steps.oidc-exchange.outputs.api_key != 'fallback' && steps.oidc-exchange.outputs.api_key || '') }}
           # Google Gemini fallback
-          GOOGLE_API_KEY: ${{ secrets.OPENCODE_LLM_API_KEY || steps.oidc-exchange.outputs.api_key || secrets.GOOGLE_API_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.OPENCODE_LLM_API_KEY != '' && secrets.OPENCODE_LLM_API_KEY || (steps.oidc-exchange.outputs.api_key != 'fallback' && steps.oidc-exchange.outputs.api_key || '') }}
         run: |
           echo "Running OpenCode AI agent with Graphify MCP..."
           echo "PR: #$PR_NUMBER in $REPOSITORY"
+          
+          # Validate that we have an API key
+          if [ -z "$OPENAI_API_KEY" ] && [ -z "$ANTHROPIC_API_KEY" ] && [ -z "$GOOGLE_API_KEY" ]; then
+            echo "ERROR: No AI provider API key configured"
+            echo "Please set OPENCODE_LLM_API_KEY secret in repository settings"
+            exit 1
+          fi
 
           # Build the review prompt
           PROMPT="You are a senior software architect reviewing PR #$PR_NUMBER in $REPOSITORY.
