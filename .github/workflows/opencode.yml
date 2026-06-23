@@ -8,7 +8,7 @@
 #
 # Optional repository secrets (for custom AI provider):
 #   GRAPHIFY_LLM_API_KEY      - API key for graph extraction (Gemini/OpenAI/etc.)
-#   OPENCODE_LLM_API_KEY      - API key for AI review agent
+#   OPENCODE_LLM_API_KEY      - API key for AI review agent (overrides OIDC if set)
 #   OPENCODE_LLM_BASE_URL     - Custom OpenAI-compatible endpoint (optional)
 #   OPENCODE_LLM_MODEL        - Model to use (optional, default: provider default)
 #
@@ -169,6 +169,33 @@ jobs:
             echo "triggered=true" >> $GITHUB_OUTPUT
           fi
 
+      - name: Exchange OIDC Token for AI Gateway API Key
+        if: steps.check-trigger.outputs.triggered == 'true'
+        id: oidc-exchange
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GATEWAY_AUDIENCE: ${{ vars.OPENCODE_GATEWAY_AUDIENCE }}
+        run: |
+          echo "🔑 Exchanging GitHub OIDC token for AI Gateway API key..."
+          # Get the OIDC token from GitHub
+          OIDC_TOKEN=$(curl -s -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${GATEWAY_AUDIENCE}" | jq -r '.value')
+          if [ -z "$OIDC_TOKEN" ] || [ "$OIDC_TOKEN" = "null" ]; then
+            echo "⚠️ OIDC token exchange failed, using fallback API key"
+            echo "api_key=fallback" >> $GITHUB_OUTPUT
+          else
+            # Exchange OIDC token for gateway API key
+            GATEWAY_API_KEY=$(curl -s -X POST "$GATEWAY_AUDIENCE/auth/token" \
+              -H "Content-Type: application/json" \
+              -d "{\"token\": \"$OIDC_TOKEN\"}" | jq -r '.api_key // .access_token // .key')
+            if [ -z "$GATEWAY_API_KEY" ] || [ "$GATEWAY_API_KEY" = "null" ]; then
+              echo "⚠️ Gateway API key exchange failed, using fallback"
+              echo "api_key=fallback" >> $GITHUB_OUTPUT
+            else
+              echo "✅ API key obtained from gateway"
+              echo "api_key=$GATEWAY_API_KEY" >> $GITHUB_OUTPUT
+            fi
+          fi
+
       - name: Run OpenCode AI Review
         if: steps.check-trigger.outputs.triggered == 'true'
         id: review
@@ -177,13 +204,14 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
           REPOSITORY: ${{ github.repository }}
           # AI Provider Configuration (custom endpoint support)
-          OPENAI_API_KEY: ${{ secrets.OPENCODE_LLM_API_KEY || secrets.OPENAI_API_KEY }}
+          # Priority: 1. Explicit secret, 2. OIDC-exchanged key, 3. Fallback providers
+          OPENAI_API_KEY: ${{ secrets.OPENCODE_LLM_API_KEY || steps.oidc-exchange.outputs.api_key || secrets.OPENAI_API_KEY }}
           OPENAI_BASE_URL: ${{ secrets.OPENCODE_LLM_BASE_URL }}
           OPENAI_MODEL: ${{ secrets.OPENCODE_LLM_MODEL }}
           # Anthropic fallback
-          ANTHROPIC_API_KEY: ${{ secrets.OPENCODE_LLM_API_KEY || secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.OPENCODE_LLM_API_KEY || steps.oidc-exchange.outputs.api_key || secrets.ANTHROPIC_API_KEY }}
           # Google Gemini fallback
-          GOOGLE_API_KEY: ${{ secrets.OPENCODE_LLM_API_KEY || secrets.GOOGLE_API_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.OPENCODE_LLM_API_KEY || steps.oidc-exchange.outputs.api_key || secrets.GOOGLE_API_KEY }}
         run: |
           echo "🤖 Running OpenCode AI agent with Graphify MCP..."
           echo "📋 PR: #$PR_NUMBER in $REPOSITORY"
