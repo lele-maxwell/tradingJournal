@@ -1,31 +1,32 @@
 "use client";
 
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 
 export function Hero() {
+  const t = useTranslations("landing.hero");
+
   return (
     <section className="hero-section">
       <div className="container">
         <div className="hero-grid">
           <div className="hero-text">
             <div className="badge-wrapper">
-              <span className="badge-premium">The Trader's Edge</span>
+              <span className="badge-premium">{t("badge")}</span>
             </div>
             <h1 className="hero-title">
-              Professional Discipline <br />
-              <span className="text-gold-gradient">Systematized.</span>
+              {t("title")} <br />
+              <span className="text-gold-gradient">{t("titleAccent")}</span>
             </h1>
             <p className="hero-desc">
-              Log, analyze, and master your trading psychology with the premium 
-              journaling system designed for the top 1%. Transform raw data into 
-              consistent execution.
+              {t("description")}
             </p>
             <div className="hero-ctas">
               <Link href="/signup" className="btn btn-primary btn-large">
-                Open Your Journal
+                {t("ctaPrimary")}
               </Link>
               <Link href="#features" className="btn btn-secondary btn-large">
-                Explore Features
+                {t("ctaSecondary")}
               </Link>
             </div>
           </div>

@@ -3,38 +3,46 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/auth";
+import { getLocale, getTranslations } from "next-intl/server";
 
-export const metadata: Metadata = { title: "Trade Detail" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("tradeDetail");
+  return { title: t("execution") };
+}
 
-const CHECKLIST_LABELS: Record<string, string> = {
-  supportRespected: "Support respected",
-  resistanceRespected: "Resistance respected",
-  trendlineRespected: "Trendline respected",
-  orderBlockRespected: "Order block respected",
-  confluence: "Confluence / Intersection",
-  retestConfirmed: "Retest confirmed",
-  rejectionCandle: "Rejection candle",
-  liquiditySweep: "Liquidity sweep",
-  msShift: "Market structure shift",
-  htfAligned: "HTF aligned",
-  londonSession: "London session",
-  nySession: "NY session",
-  avoidedLowVolume: "Avoided low volume",
-  entryConfirmed: "Entry confirmation",
-  riskManaged: "Risk managed",
-  noImpulsiveEntry: "No impulsive entry",
-};
+const CHECKLIST_KEYS = [
+  "supportRespected",
+  "resistanceRespected",
+  "trendlineRespected",
+  "orderBlockRespected",
+  "confluence",
+  "retestConfirmed",
+  "rejectionCandle",
+  "liquiditySweep",
+  "msShift",
+  "htfAligned",
+  "londonSession",
+  "nySession",
+  "avoidedLowVolume",
+  "entryConfirmed",
+  "riskManaged",
+  "noImpulsiveEntry",
+] as const;
 
-const MENTAL_STATE_LABELS: Record<string, string> = {
-  calm: "😌 Calm",
-  focused: "🎯 Focused",
-  tired: "😴 Tired",
-  fearful: "😨 Fearful",
-  overconfident: "😤 Overconfident",
-  revenge: "😤 Revenge trading",
-  emotional: "😰 Emotional",
-  distracted: "🙃 Distracted",
-};
+const PSYCH_KEYS = [
+  "followedPlan",
+  "movedSL",
+  "enteredEarly",
+  "overtraded",
+  "mentalHealthOk",
+] as const;
+
+const NOTE_KEYS = [
+  "setupExplanation",
+  "executionNotes",
+  "mistakesMade",
+  "lessonsLearned",
+] as const;
 
 function formatPL(value: number | null) {
   if (value === null) return "—";
@@ -60,6 +68,13 @@ export default async function TradeDetailPage({
   if (!user) return null;
 
   const { id } = await params;
+  const locale = await getLocale();
+
+  const t = await getTranslations();
+  const tDetail = await getTranslations("tradeDetail");
+  const tChecklist = await getTranslations("tradeDetail.checklist");
+  const tMentalStates = await getTranslations("tradeDetail.mentalStates");
+  const tImageTypes = await getTranslations("tradeDetail.imageTypes");
 
   const trade = await prisma.trade.findFirst({
     where: { id, userId: user.id },
@@ -73,12 +88,20 @@ export default async function TradeDetailPage({
   const isLoss = pl !== null && pl < 0;
 
   const checklistEntries = trade.checklist
-    ? Object.entries(CHECKLIST_LABELS).map(([key, label]) => ({
+    ? CHECKLIST_KEYS.map((key) => ({
         key,
-        label,
-        checked: (trade.checklist as Record<string, any>)[key] === true,
+        label: tChecklist(key),
+        checked: (trade.checklist as Record<string, unknown>)[key] === true,
       }))
     : [];
+
+  const dateFormatter = new Intl.DateTimeFormat(
+    locale === "fr" ? "fr-FR" : "en-GB",
+    { weekday: "long", day: "numeric", month: "long", year: "numeric" }
+  );
+  const dateTimeFormatter = new Intl.DateTimeFormat(
+    locale === "fr" ? "fr-FR" : "en-GB"
+  );
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24, maxWidth: 800, margin: "0 auto", width: "100%" }}>
@@ -86,21 +109,21 @@ export default async function TradeDetailPage({
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
         <div>
           <Link href="/trades" style={{ fontSize: 12, color: "var(--text-muted)", textDecoration: "none", display: "flex", alignItems: "center", gap: 4, marginBottom: 8 }}>
-            ← Back to trades
+            {t("common.backToTrades")}
           </Link>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <h1 style={{ fontSize: 24, fontWeight: 700, color: "var(--text-primary)", letterSpacing: "-0.03em" }}>
               {trade.pair}
             </h1>
             <span className={`badge ${isWin ? "badge-win" : isLoss ? "badge-loss" : "badge-neutral"}`} style={{ fontSize: 12 }}>
-              {isWin ? "Win" : isLoss ? "Loss" : "Open"}
+              {isWin ? t("common.win") : isLoss ? t("common.loss") : t("common.open")}
             </span>
             <span className={`badge ${trade.direction === "buy" ? "badge-accent" : "badge-neutral"}`} style={{ fontSize: 12 }}>
-              {trade.direction === "buy" ? "📈 Buy" : "📉 Sell"}
+              {trade.direction === "buy" ? t("common.buyBadge") : t("common.sellBadge")}
             </span>
           </div>
           <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>
-            {new Date(trade.entryTime).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+            {dateFormatter.format(new Date(trade.entryTime))}
             {trade.strategy ? ` · ${trade.strategy}` : ""}
           </p>
         </div>
@@ -109,7 +132,7 @@ export default async function TradeDetailPage({
             {formatPL(pl)}
           </p>
           {trade.riskReward && (
-            <p style={{ fontSize: 12, color: "var(--text-muted)" }}>RR: {trade.riskReward}</p>
+            <p style={{ fontSize: 12, color: "var(--text-muted)" }}>{tDetail("rrLabel", { rr: trade.riskReward })}</p>
           )}
         </div>
       </div>
@@ -117,12 +140,14 @@ export default async function TradeDetailPage({
       {/* Screenshots */}
       {trade.images.length > 0 && (
         <div className="card">
-          <p className="section-title">Screenshots</p>
+          <p className="section-title">{tDetail("screenshots")}</p>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
             {trade.images.map((img) => (
               <div key={img.id}>
                 <p style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6, textTransform: "capitalize" }}>
-                  {img.imageType.replace(/_/g, " ")}
+                  {tImageTypes.has(img.imageType as never)
+                    ? tImageTypes(img.imageType as never)
+                    : img.imageType.replace(/_/g, " ")}
                 </p>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
@@ -140,27 +165,27 @@ export default async function TradeDetailPage({
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
         {/* Execution */}
         <div className="card">
-          <p className="section-title" style={{ marginBottom: 0 }}>Execution</p>
-          <InfoRow label="Entry Price" value={trade.entryPrice.toString()} />
-          <InfoRow label="Exit Price" value={trade.exitPrice?.toString()} />
-          <InfoRow label="Stop Loss" value={trade.stopLoss.toString()} />
-          <InfoRow label="Take Profit" value={trade.takeProfit.toString()} />
-          <InfoRow label="Position Size" value={trade.positionSize?.toString()} />
-          <InfoRow label="Risk %" value={trade.riskPercent ? `${trade.riskPercent}%` : undefined} />
-          <InfoRow label="Risk/Reward" value={trade.riskReward?.toString()} />
-          <InfoRow label="Entry Time" value={new Date(trade.entryTime).toLocaleString()} />
-          <InfoRow label="Exit Time" value={trade.exitTime ? new Date(trade.exitTime).toLocaleString() : undefined} />
-          <InfoRow label="Entry TF" value={trade.entryTf} />
-          <InfoRow label="Higher TF" value={trade.higherTf} />
+          <p className="section-title" style={{ marginBottom: 0 }}>{tDetail("execution")}</p>
+          <InfoRow label={tDetail("entryPrice")} value={trade.entryPrice.toString()} />
+          <InfoRow label={tDetail("exitPrice")} value={trade.exitPrice?.toString()} />
+          <InfoRow label={tDetail("stopLoss")} value={trade.stopLoss.toString()} />
+          <InfoRow label={tDetail("takeProfit")} value={trade.takeProfit.toString()} />
+          <InfoRow label={tDetail("positionSize")} value={trade.positionSize?.toString()} />
+          <InfoRow label={tDetail("riskPercent")} value={trade.riskPercent ? `${trade.riskPercent}%` : undefined} />
+          <InfoRow label={tDetail("riskReward")} value={trade.riskReward?.toString()} />
+          <InfoRow label={tDetail("entryTime")} value={dateTimeFormatter.format(new Date(trade.entryTime))} />
+          <InfoRow label={tDetail("exitTime")} value={trade.exitTime ? dateTimeFormatter.format(new Date(trade.exitTime)) : undefined} />
+          <InfoRow label={tDetail("entryTf")} value={trade.entryTf} />
+          <InfoRow label={tDetail("higherTf")} value={trade.higherTf} />
         </div>
 
         {/* Checklist */}
         <div className="card">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-            <p className="section-title" style={{ marginBottom: 0 }}>Strategy Checklist</p>
+            <p className="section-title" style={{ marginBottom: 0 }}>{tDetail("strategyChecklist")}</p>
             {trade.checklist && (
               <span className={`badge ${trade.checklist.score >= 10 ? "badge-win" : trade.checklist.score >= 6 ? "badge-neutral" : "badge-loss"}`}>
-                {trade.checklist.score} / 16
+                {tDetail("scoreOf", { score: trade.checklist.score })}
               </span>
             )}
           </div>
@@ -190,27 +215,21 @@ export default async function TradeDetailPage({
 
       {/* Psychology */}
       <div className="card">
-        <p className="section-title">Psychology</p>
+        <p className="section-title">{tDetail("psychology")}</p>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
           <div>
-            <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 8 }}>Mental State</p>
+            <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 8 }}>{tDetail("mentalState")}</p>
             <span style={{ fontSize: 22 }}>
-              {trade.mentalState ? MENTAL_STATE_LABELS[trade.mentalState] ?? trade.mentalState : "—"}
+              {trade.mentalState ? tMentalStates.has(trade.mentalState as never) ? tMentalStates(trade.mentalState as never) : trade.mentalState : "—"}
             </span>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {[
-              { key: "followedPlan", label: "Followed plan" },
-              { key: "movedSL", label: "Moved SL emotionally" },
-              { key: "enteredEarly", label: "Entered early" },
-              { key: "overtraded", label: "Overtraded" },
-              { key: "mentalHealthOk", label: "Mental health was OK" },
-            ].map(({ key, label }) => {
+            {PSYCH_KEYS.map((key) => {
               const val = (trade as Record<string, unknown>)[key] as boolean | null;
               return (
                 <div key={key} style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <span style={{ fontSize: 13 }}>{val === true ? "✅" : val === false ? "❌" : "—"}</span>
-                  <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>{label}</span>
+                  <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>{tDetail(key)}</span>
                 </div>
               );
             })}
@@ -221,19 +240,14 @@ export default async function TradeDetailPage({
       {/* Notes */}
       {(trade.setupNotes || trade.executionNotes || trade.mistakeNotes || trade.lessonsLearned) && (
         <div className="card">
-          <p className="section-title">Notes</p>
+          <p className="section-title">{tDetail("notes")}</p>
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            {[
-              { key: "setupNotes", label: "Setup Explanation" },
-              { key: "executionNotes", label: "Execution Notes" },
-              { key: "mistakeNotes", label: "Mistakes Made" },
-              { key: "lessonsLearned", label: "Lessons Learned" },
-            ]
-              .filter(({ key }) => (trade as Record<string, unknown>)[key])
-              .map(({ key, label }) => (
+            {NOTE_KEYS
+              .filter((key) => (trade as Record<string, unknown>)[key])
+              .map((key) => (
                 <div key={key}>
                   <p style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>
-                    {label}
+                    {tDetail(key)}
                   </p>
                   <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.7 }}>
                     {(trade as Record<string, unknown>)[key] as string}

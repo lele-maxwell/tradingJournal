@@ -4,10 +4,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { LanguageSelector } from "@/components/LanguageSelector";
 
 const navItems = [
   {
-    label: "Dashboard",
+    labelKey: "nav.dashboard",
     href: "/dashboard",
     icon: (
       <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -19,7 +21,7 @@ const navItems = [
     ),
   },
   {
-    label: "New Trade",
+    labelKey: "nav.newTrade",
     href: "/trades/new",
     icon: (
       <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -29,7 +31,7 @@ const navItems = [
     ),
   },
   {
-    label: "Trades",
+    labelKey: "nav.trades",
     href: "/trades",
     icon: (
       <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -38,7 +40,7 @@ const navItems = [
     ),
   },
   {
-    label: "Reports",
+    labelKey: "nav.reports",
     href: "/reports/weekly",
     icon: (
       <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -53,6 +55,7 @@ export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createClient();
+  const t = useTranslations();
 
   async function handleLogout() {
     await supabase.auth.signOut();
@@ -110,7 +113,7 @@ export default function Sidebar() {
                 letterSpacing: "-0.02em",
               }}
             >
-              MaxStrat<span style={{ color: "var(--accent)" }}>.</span>
+              {t("common.appName")}<span style={{ color: "var(--accent)" }}>.</span>
             </span>
           </div>
         </div>
@@ -161,7 +164,7 @@ export default function Sidebar() {
                 }}
               >
                 <span style={{ opacity: isActive ? 1 : 0.6 }}>{item.icon}</span>
-                {item.label}
+                {t(item.labelKey)}
               </Link>
             );
           })}
@@ -181,8 +184,8 @@ export default function Sidebar() {
             }}
           >
             {[
-              { label: "Weekly", href: "/reports/weekly" },
-              { label: "Monthly", href: "/reports/monthly" },
+              { labelKey: "nav.weekly", href: "/reports/weekly" },
+              { labelKey: "nav.monthly", href: "/reports/monthly" },
             ].map((sub) => (
               <Link
                 key={sub.href}
@@ -202,15 +205,18 @@ export default function Sidebar() {
                   transition: "all 0.12s",
                 }}
               >
-                {sub.label}
+                {t(sub.labelKey)}
               </Link>
             ))}
           </div>
         )}
       </nav>
 
-      {/* Logout */}
-      <div style={{ padding: "10px 8px", borderTop: "1px solid var(--border-subtle)" }}>
+      {/* Footer: language selector + logout */}
+      <div style={{ padding: "10px 8px", borderTop: "1px solid var(--border-subtle)", display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ display: "flex", justifyContent: "center" }}>
+          <LanguageSelector />
+        </div>
         <button
           onClick={handleLogout}
           className="btn btn-ghost"
@@ -219,7 +225,7 @@ export default function Sidebar() {
           <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
             <path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h6a2 2 0 012 2v1" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-          Sign out
+          {t("nav.signOut")}
         </button>
       </div>
     </aside>

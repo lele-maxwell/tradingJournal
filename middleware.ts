@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { detectLocale, isSupportedLocale, LOCALE_COOKIE } from "@/i18n/config";
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -49,6 +50,18 @@ export async function middleware(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     return NextResponse.redirect(url);
+  }
+
+  // i18n: ensure a locale cookie exists (first-visit Accept-Language detection).
+  // Additive only — does not alter auth redirects or matcher above.
+  const existingLocale = request.cookies.get(LOCALE_COOKIE)?.value;
+  if (!isSupportedLocale(existingLocale)) {
+    const detected = detectLocale(request.headers.get("accept-language"));
+    supabaseResponse.cookies.set(LOCALE_COOKIE, detected, {
+      path: "/",
+      maxAge: 60 * 60 * 24 * 365,
+      sameSite: "lax",
+    });
   }
 
   return supabaseResponse;

@@ -2,12 +2,15 @@
 
 import { useActionState } from "react";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { signupAction, type AuthState } from "@/lib/actions/auth.actions";
+import { LanguageSelector } from "@/components/LanguageSelector";
 
 const initialState: AuthState = {};
 
 export default function SignupPage() {
   const [state, action, pending] = useActionState(signupAction, initialState);
+  const t = useTranslations("auth.signup");
 
   return (
     <div
@@ -21,6 +24,11 @@ export default function SignupPage() {
       }}
     >
       <div style={{ width: "100%", maxWidth: 380 }}>
+        {/* Language */}
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 20 }}>
+          <LanguageSelector />
+        </div>
+
         {/* Logo */}
         <div style={{ textAlign: "center", marginBottom: 36 }}>
           <div
@@ -49,10 +57,10 @@ export default function SignupPage() {
               marginBottom: 6,
             }}
           >
-            Start journaling
+            {t("title")}
           </h1>
           <p style={{ fontSize: 14, color: "var(--text-muted)" }}>
-            Create your MaxStrat account
+            {t("subtitle")}
           </p>
         </div>
 
@@ -68,58 +76,57 @@ export default function SignupPage() {
                 marginBottom: 8,
               }}
             >
-              Check your email
+              {t("successTitle")}
             </h2>
             <p style={{ fontSize: 13, color: "var(--text-muted)", lineHeight: 1.6 }}>
-              We sent a confirmation link to your email address. Click it to
-              activate your account.
+              {t("successBody")}
             </p>
             <Link
               href="/login"
               className="btn btn-primary"
               style={{ display: "inline-flex", marginTop: 20 }}
             >
-              Back to login
+              {t("backToLogin")}
             </Link>
           </div>
         ) : (
           <div className="card">
             <form action={action} style={{ display: "flex", flexDirection: "column", gap: 18 }}>
               <div>
-                <label htmlFor="email">Email</label>
+                <label htmlFor="email">{t("email")}</label>
                 <input
                   id="email"
                   name="email"
                   type="email"
                   autoComplete="email"
                   required
-                  placeholder="you@example.com"
+                  placeholder={t("emailPlaceholder")}
                   className="input"
                 />
               </div>
 
               <div>
-                <label htmlFor="password">Password</label>
+                <label htmlFor="password">{t("password")}</label>
                 <input
                   id="password"
                   name="password"
                   type="password"
                   autoComplete="new-password"
                   required
-                  placeholder="Min. 6 characters"
+                  placeholder={t("passwordPlaceholder")}
                   className="input"
                 />
               </div>
 
               <div>
-                <label htmlFor="confirmPassword">Confirm password</label>
+                <label htmlFor="confirmPassword">{t("confirmPassword")}</label>
                 <input
                   id="confirmPassword"
                   name="confirmPassword"
                   type="password"
                   autoComplete="new-password"
                   required
-                  placeholder="Repeat password"
+                  placeholder={t("confirmPlaceholder")}
                   className="input"
                 />
               </div>
@@ -158,10 +165,10 @@ export default function SignupPage() {
                         display: "inline-block",
                       }}
                     />
-                    Creating account…
+                    {t("submitting")}
                   </span>
                 ) : (
-                  "Create account"
+                  t("submit")
                 )}
               </button>
             </form>
@@ -176,12 +183,12 @@ export default function SignupPage() {
             color: "var(--text-muted)",
           }}
         >
-          Already have an account?{" "}
+          {t("haveAccount")}{" "}
           <Link
             href="/login"
             style={{ color: "var(--accent)", textDecoration: "none", fontWeight: 500 }}
           >
-            Sign in
+            {t("signIn")}
           </Link>
         </p>
       </div>

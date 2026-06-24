@@ -1,43 +1,37 @@
-import { FolderIcon } from "@/components/icons/FolderIcon";
+"use client";
+
+import { useTranslations } from "next-intl";
+
+type FeatureKey = {
+  titleKey: "strategyValidationTitle" | "mentalPerformanceTitle" | "advancedAnalyticsTitle" | "visualArchiveTitle";
+  descKey: "strategyValidationDesc" | "mentalPerformanceDesc" | "advancedAnalyticsDesc" | "visualArchiveDesc";
+  icon: string;
+};
 
 export function Features() {
-  const features = [
-    {
-      title: "Strategy Validation",
-      desc: "Systematic checklist scoring to ensure you only take trades that align with your edge.",
-      icon: "📊"
-    },
-    {
-      title: "Mental Performance",
-      desc: "Track your emotional state, discipline, and execution quality for every single entry.",
-      icon: "🧠"
-    },
-    {
-      title: "Advanced Analytics",
-      desc: "Automated R/R tracking, win rate analysis, and strategy-specific performance reports.",
-      icon: "📈"
-    },
-    {
-      title: "Visual Archive",
-      desc: "Before, after, and higher timeframe screenshots stored and organized instantly.",
-      icon: "📁"
-    }
+  const t = useTranslations("landing.features");
+
+  const features: FeatureKey[] = [
+    { titleKey: "strategyValidationTitle", descKey: "strategyValidationDesc", icon: "📊" },
+    { titleKey: "mentalPerformanceTitle", descKey: "mentalPerformanceDesc", icon: "🧠" },
+    { titleKey: "advancedAnalyticsTitle", descKey: "advancedAnalyticsDesc", icon: "📈" },
+    { titleKey: "visualArchiveTitle", descKey: "visualArchiveDesc", icon: "📁" },
   ];
 
   return (
     <section id="features" className="features-section">
       <div className="container">
         <div className="section-header">
-          <span className="section-badge">Toolkit</span>
-          <h2 className="section-title">Built for Professionals</h2>
+          <span className="section-badge">{t("badge")}</span>
+          <h2 className="section-title">{t("title")}</h2>
         </div>
 
         <div className="features-grid">
-          {features.map((f, i) => (
-            <div key={i} className="feature-card">
+          {features.map((f) => (
+            <div key={f.titleKey} className="feature-card">
               <div className="feature-icon">{f.icon}</div>
-              <h3 className="feature-title">{f.title}</h3>
-              <p className="feature-desc">{f.desc}</p>
+              <h3 className="feature-title">{t(f.titleKey)}</h3>
+              <p className="feature-desc">{t(f.descKey)}</p>
             </div>
           ))}
         </div>
