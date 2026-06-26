@@ -134,7 +134,7 @@ jobs:
           pip install "graphifyy[mcp,pdf]"
           graphify-mcp --help >/dev/null 2>&1 && echo "Graphify MCP installed" || echo "Graphify MCP not found"
 
-      - name: Configure OpenCode MCP
+      - name: Configure OpenCode MCP and Provider
         run: |
           mkdir -p .opencode
           cat > .opencode/opencode.json << 'OPENCODE_EOF'
@@ -146,10 +146,18 @@ jobs:
                 "command": ["graphify-mcp", "graphify-out/graph.json"],
                 "enabled": true
               }
+            },
+            "provider": {
+              "camer-digital": {
+                "name": "camer-digital",
+                "baseUrl": "https://ai.camer.digital/opencode",
+                "apiKey": "${OPENAI_API_KEY}",
+                "models": ["qwen3p6-plus"]
+              }
             }
           }
           OPENCODE_EOF
-          echo "OpenCode MCP configuration created"
+          echo "OpenCode MCP and provider configuration created"
 
       - name: Check for Graphify trigger
         id: check-trigger
