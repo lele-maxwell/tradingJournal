@@ -230,13 +230,34 @@ jobs:
           fi
 
           # Configure OpenCode authentication
-          # OpenCode uses the camer-digital gateway, so we need to set up auth
+          # OpenCode uses environment variables directly (OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.)
+          # The 'wellknown' auth type reads from OPENAI_API_KEY environment variable
+          # No need to run 'opencode providers add' - just set the env var
+          echo "OpenCode will use OPENAI_API_KEY environment variable for authentication"
           if [ -n "$OPENAI_API_KEY" ] && [ "$OPENAI_API_KEY" != "null" ]; then
-            echo "Configuring OpenCode with API key..."
-            opencode providers add camer-digital --api-key "$OPENAI_API_KEY" 2>/dev/null || true
-            if [ -n "$OPENAI_BASE_URL" ] && [ "$OPENAI_BASE_URL" != "null" ]; then
-              opencode providers update camer-digital --base-url "$OPENAI_BASE_URL" 2>/dev/null || true
-            fi
+            echo "API key is configured (${#OPENAI_API_KEY} characters)"
+          else
+            echo "WARNING: No OPENAI_API_KEY set"
+          fi
+          
+          # Set model early for testing
+          MODEL="${OPENAI_MODEL:-camer-digital/qwen3p6-plus}"
+          echo "Using model: $MODEL"
+          
+          # Verify OpenCode can see the credentials
+          echo "Verifying OpenCode authentication..."
+          opencode providers list 2>&1 || echo "Could not list providers"
+          
+          # Quick test to verify OpenCode can connect to the LLM
+          echo "Testing OpenCode connection..."
+          echo "Hello" | timeout 30 opencode run --model "$MODEL" --format json "Say 'test ok' in 2 words" > /tmp/test-output.json 2>/tmp/test-stderr.txt || TEST_EXIT=$?
+          if [ "${TEST_EXIT:-0}" -ne 0 ]; then
+            echo "WARNING: OpenCode test failed with exit code ${TEST_EXIT:-0}"
+            echo "=== Test stderr ==="
+            cat /tmp/test-stderr.txt 2>/dev/null || echo "(no stderr)"
+            echo "=== End test stderr ==="
+          else
+            echo "OpenCode test passed - connection OK"
           fi
 
           # Build the review prompt
@@ -261,12 +282,24 @@ jobs:
           # Run OpenCode with the review prompt using JSON format for reliable parsing
           # The MCP server will be started automatically from .opencode/opencode.json
           echo "Running OpenCode with prompt..."
-          # Use model from secret or default to a known good model
-          MODEL="${OPENAI_MODEL:-camer-digital/qwen3p6-plus}"
-          echo "Using model: $MODEL"
           opencode run --format json --model "$MODEL" "$PROMPT" > /tmp/opencode-output.json 2>/tmp/opencode-stderr.txt
           OPENCODE_EXIT=$?
           echo "OpenCode exited with: $OPENCODE_EXIT"
+          
+          # Show stderr for debugging (but mask sensitive values)
+          if [ -f /tmp/opencode-stderr.txt ]; then
+            echo "=== OpenCode stderr output ==="
+            sed -E 's/(api[_-]?key|token|secret|password|authorization)[=:][[:space:]]*[a-zA-Z0-9_-]+/\1=***REDACTED***/gi' /tmp/opencode-stderr.txt || true
+            echo "=== End stderr ==="
+          fi
+          
+          # If OpenCode failed, show more details
+          if [ $OPENCODE_EXIT -ne 0 ]; then
+            echo "OpenCode failed with exit code $OPENCODE_EXIT"
+            echo "=== stdout (first 100 lines) ==="
+            head -100 /tmp/opencode-output.json 2>/dev/null || echo "(no stdout)"
+            echo "=== End stdout ==="
+          fi
 
           # Extract the review comment from JSON output using a separate Python script file
           # This avoids YAML heredoc issues
