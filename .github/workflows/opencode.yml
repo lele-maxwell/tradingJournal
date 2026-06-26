@@ -152,7 +152,9 @@ jobs:
                 "name": "camer-digital",
                 "baseUrl": "https://ai.camer.digital/opencode",
                 "apiKey": "${OPENAI_API_KEY}",
-                "models": ["qwen3p6-plus"]
+                "models": {
+                  "qwen3p6-plus": {}
+                }
               }
             }
           }
