@@ -134,33 +134,6 @@ jobs:
           pip install "graphifyy[mcp,pdf]"
           graphify-mcp --help >/dev/null 2>&1 && echo "Graphify MCP installed" || echo "Graphify MCP not found"
 
-      - name: Configure OpenCode MCP and Provider
-        run: |
-          mkdir -p .opencode
-          cat > .opencode/opencode.json << 'OPENCODE_EOF'
-          {
-            "$schema": "https://opencode.ai/config.json",
-            "mcp": {
-              "graphify": {
-                "type": "local",
-                "command": ["graphify-mcp", "graphify-out/graph.json"],
-                "enabled": true
-              }
-            },
-            "provider": {
-              "camer-digital": {
-                "name": "camer-digital",
-                "baseUrl": "https://ai.camer.digital/opencode",
-                "apiKey": "${OPENAI_API_KEY}",
-                "models": {
-                  "qwen3p6-plus": {}
-                }
-              }
-            }
-          }
-          OPENCODE_EOF
-          echo "OpenCode MCP and provider configuration created"
-
       - name: Check for Graphify trigger
         id: check-trigger
         env:
@@ -211,6 +184,40 @@ jobs:
               echo "api_key=$GATEWAY_API_KEY" >> $GITHUB_OUTPUT
             fi
           fi
+
+      - name: Configure OpenCode MCP and Provider
+        if: steps.check-trigger.outputs.triggered == 'true'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENCODE_LLM_API_KEY != '' && secrets.OPENCODE_LLM_API_KEY || (steps.oidc-exchange.outputs.api_key != 'fallback' && steps.oidc-exchange.outputs.api_key || '') }}
+        run: |
+          mkdir -p .opencode
+          python3 << 'PYEOF'
+          import json, os
+          api_key = os.environ.get("OPENAI_API_KEY", "")
+          config = {
+              "$schema": "https://opencode.ai/config.json",
+              "mcp": {
+                  "graphify": {
+                      "type": "local",
+                      "command": ["graphify-mcp", "graphify-out/graph.json"],
+                      "enabled": True
+                  }
+              },
+              "provider": {
+                  "camer-digital": {
+                      "name": "camer-digital",
+                      "baseUrl": "https://ai.camer.digital/opencode",
+                      "apiKey": api_key if api_key else "",
+                      "models": {
+                          "qwen3p6-plus": {}
+                      }
+                  }
+              }
+          }
+          with open(".opencode/opencode.json", "w") as f:
+              json.dump(config, f, indent=2)
+          print("OpenCode MCP and provider configuration created")
+          PYEOF
 
       - name: Run OpenCode AI Review
         if: steps.check-trigger.outputs.triggered == 'true'
@@ -266,6 +273,9 @@ jobs:
             echo "=== Test stderr ==="
             cat /tmp/test-stderr.txt 2>/dev/null || echo "(no stderr)"
             echo "=== End test stderr ==="
+            echo "=== Test stdout ==="
+            cat /tmp/test-output.json 2>/dev/null || echo "(no stdout)"
+            echo "=== End test stdout ==="
           else
             echo "OpenCode test passed - connection OK"
           fi
