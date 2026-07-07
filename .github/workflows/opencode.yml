@@ -189,11 +189,25 @@ jobs:
         if: steps.check-trigger.outputs.triggered == 'true'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENCODE_LLM_API_KEY != '' && secrets.OPENCODE_LLM_API_KEY || (steps.oidc-exchange.outputs.api_key != 'fallback' && steps.oidc-exchange.outputs.api_key || '') }}
+          OPENCODE_LLM_BASE_URL: ${{ secrets.OPENCODE_LLM_BASE_URL }}
+          OPENCODE_LLM_MODEL: ${{ secrets.OPENCODE_LLM_MODEL }}
         run: |
           mkdir -p .opencode
           python3 << 'PYEOF'
           import json, os
+
           api_key = os.environ.get("OPENAI_API_KEY", "")
+          base_url = os.environ.get("OPENCODE_LLM_BASE_URL", "https://ai.camer.digital/opencode")
+          model_name = os.environ.get("OPENCODE_LLM_MODEL", "qwen3p6-plus")
+
+          # If model contains a provider prefix like "camer-digital/qwen3p6-plus", extract the model part
+          if "/" in model_name:
+              model_name = model_name.split("/", 1)[1]
+
+          print(f"Provider baseUrl: {base_url}")
+          print(f"Provider model: {model_name}")
+          print(f"API key length: {len(api_key)}")
+
           config = {
               "$schema": "https://opencode.ai/config.json",
               "mcp": {
@@ -206,10 +220,10 @@ jobs:
               "provider": {
                   "camer-digital": {
                       "name": "camer-digital",
-                      "baseUrl": "https://ai.camer.digital/opencode",
+                      "baseUrl": base_url,
                       "apiKey": api_key if api_key else "",
                       "models": {
-                          "qwen3p6-plus": {}
+                          model_name: {}
                       }
                   }
               }
@@ -238,7 +252,7 @@ jobs:
         run: |
           echo "Running OpenCode AI agent with Graphify MCP..."
           echo "PR: #$PR_NUMBER in $REPOSITORY"
-          
+
           # Validate that we have an API key
           if [ -z "$OPENAI_API_KEY" ] && [ -z "$ANTHROPIC_API_KEY" ] && [ -z "$GOOGLE_API_KEY" ]; then
             echo "ERROR: No AI provider API key configured"
@@ -247,29 +261,26 @@ jobs:
           fi
 
           # Configure OpenCode authentication
-          # OpenCode uses environment variables directly (OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.)
-          # The 'wellknown' auth type reads from OPENAI_API_KEY environment variable
-          # No need to run 'opencode providers add' - just set the env var
           echo "OpenCode will use OPENAI_API_KEY environment variable for authentication"
           if [ -n "$OPENAI_API_KEY" ] && [ "$OPENAI_API_KEY" != "null" ]; then
             echo "API key is configured (${#OPENAI_API_KEY} characters)"
           else
             echo "WARNING: No OPENAI_API_KEY set"
           fi
-          
-          # Set model early for testing
+
+          # Set model - use secret or default to camer-digital/qwen3p6-plus
           MODEL="${OPENAI_MODEL:-camer-digital/qwen3p6-plus}"
           echo "Using model: $MODEL"
-          
+
           # Verify OpenCode can see the credentials
           echo "Verifying OpenCode authentication..."
           opencode providers list 2>&1 || echo "Could not list providers"
-          
-          # Quick test to verify OpenCode can connect to the LLM
+
+          # Quick test to verify OpenCode can connect to the LLM (non-fatal)
           echo "Testing OpenCode connection..."
           echo "Hello" | timeout 30 opencode run --model "$MODEL" --format json "Say 'test ok' in 2 words" > /tmp/test-output.json 2>/tmp/test-stderr.txt || TEST_EXIT=$?
           if [ "${TEST_EXIT:-0}" -ne 0 ]; then
-            echo "WARNING: OpenCode test failed with exit code ${TEST_EXIT:-0}"
+            echo "WARNING: OpenCode test failed with exit code ${TEST_EXIT:-0} (non-fatal, continuing with review)"
             echo "=== Test stderr ==="
             cat /tmp/test-stderr.txt 2>/dev/null || echo "(no stderr)"
             echo "=== End test stderr ==="
@@ -305,14 +316,14 @@ jobs:
           opencode run --format json --model "$MODEL" "$PROMPT" > /tmp/opencode-output.json 2>/tmp/opencode-stderr.txt
           OPENCODE_EXIT=$?
           echo "OpenCode exited with: $OPENCODE_EXIT"
-          
+
           # Show stderr for debugging (but mask sensitive values)
           if [ -f /tmp/opencode-stderr.txt ]; then
             echo "=== OpenCode stderr output ==="
             sed -E 's/(api[_-]?key|token|secret|password|authorization)[=:][[:space:]]*[a-zA-Z0-9_-]+/\1=***REDACTED***/gi' /tmp/opencode-stderr.txt || true
             echo "=== End stderr ==="
           fi
-          
+
           # If OpenCode failed, show more details
           if [ $OPENCODE_EXIT -ne 0 ]; then
             echo "OpenCode failed with exit code $OPENCODE_EXIT"
@@ -322,7 +333,6 @@ jobs:
           fi
 
           # Extract the review comment from JSON output using a separate Python script file
-          # This avoids YAML heredoc issues
           cat > /tmp/parse_output.py << 'PYEOF'
           import json
           import sys
