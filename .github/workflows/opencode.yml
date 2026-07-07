@@ -1,17 +1,17 @@
 # GraphiView Pre-Merge Architectural Review
 #
-# This workflow runs Graphify's architectural review on pull requests.
-# It builds a knowledge graph from the code and uses OpenCode to analyze
-# architectural impact and post review comments.
+# This workflow runs Graphify's MCP-powered architectural review on pull requests.
+# It builds a knowledge graph, serves it via MCP, and uses OpenCode AI agent to analyze.
 #
-# Requirements:
-# - Set OPENCODE_GATEWAY_AUDIENCE variable (org-wide for ADORSYS-GIS)
-# - Optionally set GRAPHIFY_LLM_API_KEY secret for graph enrichment
-# - Optionally set GRAPHIFY_LLM_PROVIDER secret for custom LLM provider
+# Required repository variables:
+#   OPENCODE_GATEWAY_AUDIENCE - AI gateway audience for OIDC auth
 #
-# For custom OpenAI-compatible providers, set:
-# - GRAPHIFY_LLM_PROVIDER: JSON config like {"name":"kivoyo","base_url":"https://...","model":"gpt-4"}
-# - GRAPHIFY_LLM_API_KEY: Your API key
+# Optional repository secrets (for custom AI provider):
+#   GRAPHIFY_LLM_API_KEY      - API key for graph extraction (Gemini/OpenAI/etc.)
+#   OPENCODE_LLM_API_KEY      - API key for AI review agent (overrides OIDC if set)
+#   OPENCODE_LLM_BASE_URL     - Custom OpenAI-compatible endpoint (optional)
+#   OPENCODE_LLM_MODEL        - Model to use (optional, default: provider default)
+#
 name: graphify-review
 
 on:
@@ -19,115 +19,419 @@ on:
     types: [opened, synchronize, reopened]
   issue_comment:
     types: [created]
-  pull_request_review_comment:
-    types: [created]
 
-# Cancel in-progress runs when a new run is triggered
 concurrency:
   group: graphify-review-${{ github.event.pull_request.number || github.event.issue.number }}
   cancel-in-progress: true
 
 jobs:
-  # Job 1: Build the Graphify knowledge graph
+  # ============================================================
+  # Job 1: Build the Graphify Knowledge Graph
+  # ============================================================
   build-graph:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
     outputs:
-      graph-ready: ${{ steps.build.outputs.success }}
+      success: ${{ steps.build-graph-step.outputs.success }}
+      node_count: ${{ steps.build-graph-step.outputs.node_count }}
+
     steps:
-      - name: 📥 Checkout repository
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: 📊 Set up Python
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-          cache: 'pip'
 
-      - name: 📦 Install Graphify
+      - name: Cache Graphify graph
+        uses: actions/cache@v4
+        with:
+          path: graphify-out
+          key: graphify-graph-${{ hashFiles('**/*.py', '**/*.js', '**/*.ts', '**/*.rs', '**/*.go', '**/*.java') }}
+          restore-keys: graphify-graph-
+
+      - name: Install Graphify
         run: |
           pip install "graphifyy[mcp,pdf]"
           graphify --version
 
-      - name: 🔧 Configure Graphify LLM Provider (Optional)
-        if: ${{ secrets.GRAPHIFY_LLM_PROVIDER != '' }}
+      - name: Build knowledge graph
+        id: build-graph-step
         env:
-          GRAPHIFY_PROVIDER_CONFIG: ${{ secrets.GRAPHIFY_LLM_PROVIDER }}
+          GRAPHIFY_LLM_API_KEY: ${{ secrets.GRAPHIFY_LLM_API_KEY }}
+          GRAPHIFY_LLM_BASE_URL: ${{ secrets.GRAPHIFY_LLM_BASE_URL }}
+          GRAPHIFY_LLM_MODEL: ${{ secrets.GRAPHIFY_LLM_MODEL }}
         run: |
-          # Register custom LLM provider for graph enrichment
-          if [ -n "$GRAPHIFY_PROVIDER_CONFIG" ]; then
-            echo "$GRAPHIFY_PROVIDER_CONFIG" | python -c "
-          import sys, json
-          config = json.load(sys.stdin)
-          import subprocess
-          subprocess.run([
-            'graphify', 'provider', 'add', config['name'],
-            '--base-url', config['base_url'],
-            '--default-model', config['model'],
-            '--env-key', config['env_key']
-          ], check=True)
-            "
-            echo "✅ Configured custom LLM provider: $(echo $GRAPHIFY_PROVIDER_CONFIG | python -c 'import sys,json; print(json.load(sys.stdin)[\"name\"])')"
-          fi
-
-      - name: 🏗️ Build knowledge graph
-        id: build
-        env:
-          OPENAI_API_KEY: ${{ secrets.GRAPHIFY_LLM_API_KEY }}
-        run: |
-          # Build code-only graph (fast, no LLM needed)
-          # This extracts functions, classes, calls, imports using tree-sitter
+          echo "Building knowledge graph..."
           graphify update .
-          
-          # Alternative: Build full graph with LLM enrichment (requires API key)
-          # This also processes docs, images, PDFs for semantic relationships
-          # graphify . --backend kivoyo
-          
           if [ -f "graphify-out/graph.json" ]; then
-            echo "✅ Graph file created"
+            NODE_COUNT=$(python3 -c "import json; g=json.load(open('graphify-out/graph.json')); print(len(g.get('nodes', [])))" 2>/dev/null || echo "unknown")
+            echo "Graph built with $NODE_COUNT nodes"
             echo "success=true" >> $GITHUB_OUTPUT
+            echo "node_count=$NODE_COUNT" >> $GITHUB_OUTPUT
           else
-            echo "❌ Graph file not found"
+            echo "Graph file not found"
             echo "success=false" >> $GITHUB_OUTPUT
             exit 1
           fi
 
-      - name: 📤 Upload graph artifact
-        if: steps.build.outputs.success == 'true'
+      - name: Upload graph artifact
+        if: steps.build-graph-step.outputs.success == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: graphify-graph
           path: graphify-out/graph.json
           retention-days: 1
 
-      - name: 📋 Display graph stats
-        if: steps.build.outputs.success == 'true'
-        run: |
-          echo "📊 Graph statistics:"
-          graphify check-update || true
-          echo ""
-          echo "📁 Graph file size:"
-          ls -lh graphify-out/graph.json || echo "Not found"
-
-  # Job 2: Run OpenCode review with Graphify MCP integration
+  # ============================================================
+  # Job 2: Run OpenCode AI Agent with Graphify MCP
+  # ============================================================
   opencode-review:
     needs: build-graph
-    if: ${{ vars.OPENCODE_GATEWAY_AUDIENCE != '' && needs.build-graph.outputs.graph-ready == 'true' }}
-    
-    # Use the reusable workflow from ADORSYS-GIS/ai-governance
-    uses: ADORSYS-GIS/ai-governance/.github/workflows/opencode-review.yml@a887e7622d0bec0acff4ce5975229845daa90767
-    
+    if: needs.build-graph.outputs.success == 'true' || github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
-      id-token: write        # Mint the GHA OIDC token (gateway auth)
-      contents: write        # Checkout + git ops
-      pull-requests: write   # Post the review
-      issues: write          # Post issue-task / failure comments
-    
-    with:
-      audience: ${{ vars.OPENCODE_GATEWAY_AUDIENCE }}
-      # Use the manual review model for /opencode comments
-      manual_model: "camer-digital/adorsys-reviewer-pro"
-      # Use the auto review model for PR events
-      auto_model: "camer-digital/adorsys-reviewer"
-      issue_model: "camer-digital/adorsys-reviewer-pro"
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write  # For OIDC token exchange
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download graph artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: graphify-graph
+          path: graphify-out
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install OpenCode
+        run: |
+          npm install -g opencode-ai
+          opencode --version
+
+      - name: Set up Python (for Graphify MCP)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Graphify MCP
+        run: |
+          pip install "graphifyy[mcp,pdf]"
+          graphify-mcp --help >/dev/null 2>&1 && echo "Graphify MCP installed" || echo "Graphify MCP not found"
+
+      - name: Check for Graphify trigger
+        id: check-trigger
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          COMMENT_BODY: ${{ github.event.comment.body || '' }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+        run: |
+          if [ "$EVENT_NAME" = "issue_comment" ]; then
+            if echo "$COMMENT_BODY" | grep -qE '(^|[[:space:]])/(graphify|opencode|oc)\b'; then
+              echo "Manual review triggered by comment"
+              echo "triggered=true" >> $GITHUB_OUTPUT
+            else
+              echo "Skipping - not a Graphify trigger"
+              echo "triggered=false" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+          else
+            echo "Auto review triggered by PR event"
+            echo "triggered=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Exchange OIDC Token for AI Gateway API Key
+        if: steps.check-trigger.outputs.triggered == 'true'
+        id: oidc-exchange
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GATEWAY_AUDIENCE: ${{ vars.OPENCODE_GATEWAY_AUDIENCE }}
+        run: |
+          echo "Exchanging GitHub OIDC token for AI Gateway API key..."
+          # Get the OIDC token from GitHub
+          OIDC_RESPONSE=$(curl -s -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${GATEWAY_AUDIENCE}" 2>/dev/null || echo "")
+          OIDC_TOKEN=$(echo "$OIDC_RESPONSE" | jq -r '.value' 2>/dev/null || echo "")
+          if [ -z "$OIDC_TOKEN" ] || [ "$OIDC_TOKEN" = "null" ]; then
+            echo "OIDC token exchange failed, using fallback API key"
+            echo "api_key=fallback" >> $GITHUB_OUTPUT
+          else
+            echo "OIDC token obtained"
+            # Exchange OIDC token for gateway API key
+            GATEWAY_RESPONSE=$(curl -s -X POST "$GATEWAY_AUDIENCE/auth/token" \
+              -H "Content-Type: application/json" \
+              -d "{\"token\": \"$OIDC_TOKEN\"}" 2>/dev/null || echo "")
+            GATEWAY_API_KEY=$(echo "$GATEWAY_RESPONSE" | jq -r '.api_key // .access_token // .key' 2>/dev/null || echo "")
+            if [ -z "$GATEWAY_API_KEY" ] || [ "$GATEWAY_API_KEY" = "null" ]; then
+              echo "Gateway API key exchange failed, using fallback"
+              echo "api_key=fallback" >> $GITHUB_OUTPUT
+            else
+              echo "API key obtained from gateway"
+              echo "api_key=$GATEWAY_API_KEY" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: Configure OpenCode MCP and Provider
+        if: steps.check-trigger.outputs.triggered == 'true'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENCODE_LLM_API_KEY != '' && secrets.OPENCODE_LLM_API_KEY || (steps.oidc-exchange.outputs.api_key != 'fallback' && steps.oidc-exchange.outputs.api_key || '') }}
+          OPENCODE_LLM_BASE_URL: ${{ secrets.OPENCODE_LLM_BASE_URL }}
+          OPENCODE_LLM_MODEL: ${{ secrets.OPENCODE_LLM_MODEL }}
+        run: |
+          mkdir -p .opencode
+          python3 << 'PYEOF'
+          import json, os
+
+          api_key = os.environ.get("OPENAI_API_KEY", "")
+          base_url = os.environ.get("OPENCODE_LLM_BASE_URL", "https://ai.camer.digital/opencode")
+          model_name = os.environ.get("OPENCODE_LLM_MODEL", "qwen3p6-plus")
+
+          # If model contains a provider prefix like "camer-digital/qwen3p6-plus", extract the model part
+          if "/" in model_name:
+              model_name = model_name.split("/", 1)[1]
+
+          print(f"Provider baseUrl: {base_url}")
+          print(f"Provider model: {model_name}")
+          print(f"API key length: {len(api_key)}")
+
+          config = {
+              "$schema": "https://opencode.ai/config.json",
+              "mcp": {
+                  "graphify": {
+                      "type": "local",
+                      "command": ["graphify-mcp", "graphify-out/graph.json"],
+                      "enabled": True
+                  }
+              },
+              "provider": {
+                  "camer-digital": {
+                      "name": "camer-digital",
+                      "baseUrl": base_url,
+                      "apiKey": api_key if api_key else "",
+                      "models": {
+                          model_name: {}
+                      }
+                  }
+              }
+          }
+          with open(".opencode/opencode.json", "w") as f:
+              json.dump(config, f, indent=2)
+          print("OpenCode MCP and provider configuration created")
+          PYEOF
+
+      - name: Run OpenCode AI Review
+        if: steps.check-trigger.outputs.triggered == 'true'
+        id: review
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+          REPOSITORY: ${{ github.repository }}
+          # AI Provider Configuration (custom endpoint support)
+          # Priority: 1. Explicit secret, 2. OIDC-exchanged key (if not "fallback")
+          OPENAI_API_KEY: ${{ secrets.OPENCODE_LLM_API_KEY != '' && secrets.OPENCODE_LLM_API_KEY || (steps.oidc-exchange.outputs.api_key != 'fallback' && steps.oidc-exchange.outputs.api_key || '') }}
+          OPENAI_BASE_URL: ${{ secrets.OPENCODE_LLM_BASE_URL }}
+          OPENAI_MODEL: ${{ secrets.OPENCODE_LLM_MODEL }}
+          # Anthropic fallback
+          ANTHROPIC_API_KEY: ${{ secrets.OPENCODE_LLM_API_KEY != '' && secrets.OPENCODE_LLM_API_KEY || (steps.oidc-exchange.outputs.api_key != 'fallback' && steps.oidc-exchange.outputs.api_key || '') }}
+          # Google Gemini fallback
+          GOOGLE_API_KEY: ${{ secrets.OPENCODE_LLM_API_KEY != '' && secrets.OPENCODE_LLM_API_KEY || (steps.oidc-exchange.outputs.api_key != 'fallback' && steps.oidc-exchange.outputs.api_key || '') }}
+        run: |
+          echo "Running OpenCode AI agent with Graphify MCP..."
+          echo "PR: #$PR_NUMBER in $REPOSITORY"
+
+          # Validate that we have an API key
+          if [ -z "$OPENAI_API_KEY" ] && [ -z "$ANTHROPIC_API_KEY" ] && [ -z "$GOOGLE_API_KEY" ]; then
+            echo "ERROR: No AI provider API key configured"
+            echo "Please set OPENCODE_LLM_API_KEY secret in repository settings"
+            exit 1
+          fi
+
+          # Configure OpenCode authentication
+          echo "OpenCode will use OPENAI_API_KEY environment variable for authentication"
+          if [ -n "$OPENAI_API_KEY" ] && [ "$OPENAI_API_KEY" != "null" ]; then
+            echo "API key is configured (${#OPENAI_API_KEY} characters)"
+          else
+            echo "WARNING: No OPENAI_API_KEY set"
+          fi
+
+          # Set model - use secret or default to camer-digital/qwen3p6-plus
+          MODEL="${OPENAI_MODEL:-camer-digital/qwen3p6-plus}"
+          echo "Using model: $MODEL"
+
+          # Verify OpenCode can see the credentials
+          echo "Verifying OpenCode authentication..."
+          opencode providers list 2>&1 || echo "Could not list providers"
+
+          # Quick test to verify OpenCode can connect to the LLM (non-fatal)
+          echo "Testing OpenCode connection..."
+          echo "Hello" | timeout 30 opencode run --model "$MODEL" --format json "Say 'test ok' in 2 words" > /tmp/test-output.json 2>/tmp/test-stderr.txt || TEST_EXIT=$?
+          if [ "${TEST_EXIT:-0}" -ne 0 ]; then
+            echo "WARNING: OpenCode test failed with exit code ${TEST_EXIT:-0} (non-fatal, continuing with review)"
+            echo "=== Test stderr ==="
+            cat /tmp/test-stderr.txt 2>/dev/null || echo "(no stderr)"
+            echo "=== End test stderr ==="
+            echo "=== Test stdout ==="
+            cat /tmp/test-output.json 2>/dev/null || echo "(no stdout)"
+            echo "=== End test stdout ==="
+          else
+            echo "OpenCode test passed - connection OK"
+          fi
+
+          # Build the review prompt
+          PROMPT="You are a senior software architect reviewing PR #$PR_NUMBER in $REPOSITORY.
+
+          Use the Graphify MCP tools to analyze the architectural impact of this PR:
+          1. Call 'get_pr_impact' with the changed files
+          2. Call 'god_nodes' to identify highly-connected nodes
+          3. Call 'detect_cycles' to find circular dependencies
+          4. Call 'get_community' to understand module structure
+          5. Call 'get_cohesion' to measure module cohesion
+          6. Call 'blast_radius' to calculate affected nodes
+
+          Based on the analysis, provide a structured review comment with:
+          - Overall risk level (LOW/MEDIUM/HIGH)
+          - Key findings with specific data
+          - Actionable recommendations
+          - Any architectural concerns
+
+          Be concise, objective, and data-driven. Use the Graphify MCP tools - do not guess."
+
+          # Run OpenCode with the review prompt using JSON format for reliable parsing
+          # The MCP server will be started automatically from .opencode/opencode.json
+          echo "Running OpenCode with prompt..."
+          opencode run --format json --model "$MODEL" "$PROMPT" > /tmp/opencode-output.json 2>/tmp/opencode-stderr.txt
+          OPENCODE_EXIT=$?
+          echo "OpenCode exited with: $OPENCODE_EXIT"
+
+          # Show stderr for debugging (but mask sensitive values)
+          if [ -f /tmp/opencode-stderr.txt ]; then
+            echo "=== OpenCode stderr output ==="
+            sed -E 's/(api[_-]?key|token|secret|password|authorization)[=:][[:space:]]*[a-zA-Z0-9_-]+/\1=***REDACTED***/gi' /tmp/opencode-stderr.txt || true
+            echo "=== End stderr ==="
+          fi
+
+          # If OpenCode failed, show more details
+          if [ $OPENCODE_EXIT -ne 0 ]; then
+            echo "OpenCode failed with exit code $OPENCODE_EXIT"
+            echo "=== stdout (first 100 lines) ==="
+            head -100 /tmp/opencode-output.json 2>/dev/null || echo "(no stdout)"
+            echo "=== End stdout ==="
+          fi
+
+          # Extract the review comment from JSON output using a separate Python script file
+          cat > /tmp/parse_output.py << 'PYEOF'
+          import json
+          import sys
+
+          try:
+              with open('/tmp/opencode-output.json', 'r') as f:
+                  content = f.read()
+
+              # Parse JSON lines
+              assistant_messages = []
+              for line in content.strip().split('\n'):
+                  line = line.strip()
+                  if not line:
+                      continue
+                  try:
+                      event = json.loads(line)
+                      if event.get('type') == 'assistant':
+                          msg_content = event.get('content', '')
+                          if msg_content:
+                              assistant_messages.append(msg_content)
+                  except json.JSONDecodeError:
+                      if line and not line.startswith('['):
+                          assistant_messages.append(line)
+
+              if assistant_messages:
+                  print('\n\n'.join(assistant_messages))
+              else:
+                  print("No assistant message found in JSON output")
+                  sys.exit(1)
+          except Exception as e:
+              print(f"Error parsing output: {str(e)}")
+              sys.exit(1)
+          PYEOF
+
+          REVIEW_COMMENT=$(python3 /tmp/parse_output.py) || REVIEW_COMMENT=""
+
+          # Final fallback
+          if [ -z "$REVIEW_COMMENT" ] || [ "$REVIEW_COMMENT" = "No assistant message found in JSON output" ]; then
+            REVIEW_COMMENT="## Graphify MCP Analysis Complete
+
+          Status: Analysis completed but output parsing encountered issues.
+
+          ### Next Steps
+          - Check workflow logs for detailed OpenCode output
+          - Verify MCP server connected properly
+          - Ensure LLM API key is configured
+
+          ---
+          *Generated by [GraphiView](https://github.com/lele-maxwell/graphiview)*"
+          fi
+
+          # Save for next step
+          echo "review_comment<<REVIEW_EOF" >> $GITHUB_OUTPUT
+          echo "$REVIEW_COMMENT" >> $GITHUB_OUTPUT
+          echo "REVIEW_EOF" >> $GITHUB_OUTPUT
+
+      - name: Post PR Comment
+        if: steps.check-trigger.outputs.triggered == 'true' && steps.review.outputs.review_comment != ''
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+          REVIEW_COMMENT: ${{ steps.review.outputs.review_comment }}
+        run: |
+          # Check if we already posted a comment
+          EXISTING=$(gh pr view "$PR_NUMBER" --json comments -q '.comments[].body' 2>/dev/null | grep -c "Graphify MCP Review" || true)
+          if [ "$EXISTING" -gt 0 ]; then
+            echo "Graphify review comment already exists, skipping"
+            exit 0
+          fi
+
+          # Post the AI-generated review comment
+          echo "$REVIEW_COMMENT" | gh pr comment "$PR_NUMBER" --body-file -
+          echo "Review comment posted to PR #$PR_NUMBER"
+
+      - name: Fallback - Post basic analysis if AI fails
+        if: failure() && steps.check-trigger.outputs.triggered == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+          NODE_COUNT: ${{ needs.build-graph.outputs.node_count }}
+        run: |
+          # Post a basic comment if AI review failed
+          cat << EOF > /tmp/fallback-comment.md
+          ## Graphify Basic Analysis
+
+          AI review failed - posting basic graph analysis
+
+          - **Graph nodes:** $NODE_COUNT
+          - **Graph file:** graphify-out/graph.json
+          - **Status:** Graph built successfully, but AI agent could not complete review
+
+          ### Next Steps
+          - Check workflow logs for AI agent errors
+          - Verify API keys are configured for your AI provider
+          - Try running /graphify review again after fixing issues
+
+          ---
+          *Generated by [GraphiView](https://github.com/lele-maxwell/graphiview)*
+          EOF
+
+          gh pr comment "$PR_NUMBER" --body-file /tmp/fallback-comment.md 2>/dev/null || echo "Could not post fallback comment"
+          echo "Fallback comment posted"
