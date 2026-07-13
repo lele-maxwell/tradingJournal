@@ -12,6 +12,9 @@ model Trade {
   userId         String
   pair           String
   direction      String   // "buy" | "sell"
+  assetCategory  String   @default("forex") // "forex" | "index" | "futures" | "crypto" | "stocks" | "custom"
+  assetType      String?  // custom asset type name
+  accountBalance Float?  // account balance for position sizing
   strategy       String?
   entryPrice     Float
   exitPrice      Float?

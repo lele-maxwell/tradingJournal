@@ -1,8 +1,9 @@
 "use client";
 
-import { useActionState, useState, useCallback } from "react";
+import { useActionState, useState, useCallback, useMemo } from "react";
 import { createTradeAction, type TradeActionState } from "@/lib/actions/trade.actions";
-import { calcChecklistScore, calcRR } from "@/lib/validations/trade.schema";
+import { calcChecklistScore } from "@/lib/validations/trade.schema";
+import { ASSET_CATEGORIES, ASSET_PRESETS, calculatePositionSize, calculateRR, calculateEstimatedPL, isJpyPair, type AssetCategory } from "./calculations";
 
 const initialState: TradeActionState = {};
 
@@ -67,8 +68,13 @@ export default function NewTradeForm() {
   // Psychology booleans
   const [psych, setPsych] = useState<Record<string, boolean>>({});
   const [mentalState, setMentalState] = useState("");
-  // Price fields for live RR calc
-  const [prices, setPrices] = useState({ direction: "buy", entry: "", sl: "", tp: "" });
+  // Asset category
+  const [assetCategory, setAssetCategory] = useState<AssetCategory>("forex");
+  const [accountBalance, setAccountBalance] = useState<string>("");
+  // Price fields for live calculations
+  const [prices, setPrices] = useState({ direction: "buy", entry: "", sl: "", tp: "", exit: "" });
+  const [positionSize, setPositionSize] = useState<string>("");
+  const [riskPercent, setRiskPercent] = useState<string>("");
   // Screenshot previews
   const [previews, setPreviews] = useState<Record<string, string>>({});
 
@@ -79,12 +85,49 @@ export default function NewTradeForm() {
     setPsych((prev) => ({ ...prev, [name]: !prev[name] }));
 
   const score = calcChecklistScore(checklist as never);
-  const rr = calcRR(
-    prices.direction as "buy" | "sell",
-    parseFloat(prices.entry),
-    parseFloat(prices.sl),
-    parseFloat(prices.tp)
-  );
+
+  // Live RR calculation
+  const rr = useMemo(() => {
+    return calculateRR(
+      prices.direction as "buy" | "sell",
+      parseFloat(prices.entry) || 0,
+      parseFloat(prices.sl) || 0,
+      parseFloat(prices.tp) || 0
+    );
+  }, [prices.direction, prices.entry, prices.sl, prices.tp]);
+
+  // Position size recommendation
+  const positionRecommendation = useMemo(() => {
+    const balance = parseFloat(accountBalance) || 0;
+    const risk = parseFloat(riskPercent) || 0;
+    const entry = parseFloat(prices.entry) || 0;
+    const sl = parseFloat(prices.sl) || 0;
+
+    if (balance > 0 && risk > 0 && entry > 0 && sl > 0) {
+      return calculatePositionSize(balance, risk, entry, sl, assetCategory, isJpyPair(prices.entry));
+    }
+    return null;
+  }, [accountBalance, riskPercent, prices.entry, prices.sl, assetCategory, prices.entry]);
+
+  // Estimated P/L preview
+  const estimatedPL = useMemo(() => {
+    const exit = parseFloat(prices.exit) || parseFloat(prices.tp) || 0;
+    const entry = parseFloat(prices.entry) || 0;
+    const size = parseFloat(positionSize) || positionRecommendation?.size || 0;
+    const balance = parseFloat(accountBalance) || 0;
+
+    if (exit > 0 && entry > 0 && size > 0) {
+      return calculateEstimatedPL(
+        prices.direction as "buy" | "sell",
+        entry,
+        exit,
+        size,
+        assetCategory,
+        balance || undefined
+      );
+    }
+    return null;
+  }, [prices.exit, prices.tp, prices.entry, prices.direction, positionSize, positionRecommendation, assetCategory, accountBalance]);
 
   const handleScreenshot = useCallback(
     (type: string, file: File | null) => {
@@ -97,6 +140,9 @@ export default function NewTradeForm() {
 
   const fe = state.fieldErrors ?? {};
 
+  // Asset pair suggestions based on category
+  const assetSuggestions = ASSET_PRESETS[assetCategory] || [];
+
   return (
     <form action={action} style={{ display: "flex", flexDirection: "column", gap: 28, maxWidth: 760 }}>
       {/* Hidden boolean fields */}
@@ -107,6 +153,7 @@ export default function NewTradeForm() {
         <input key={k} type="hidden" name={k} value={String(v)} />
       ))}
       <input type="hidden" name="mentalState" value={mentalState} />
+      <input type="hidden" name="assetCategory" value={assetCategory} />
 
       {/* ── Section 1: Strategy Checklist ── */}
       <Section
@@ -194,10 +241,48 @@ export default function NewTradeForm() {
       {/* ── Section 2: Trade Journal ── */}
       <Section number={2} title="Trade Journal" subtitle="Record your execution details">
         <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+
+          {/* Asset Category Selection */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+            <Field label="Asset Category">
+              <select
+                name="assetCategoryForm"
+                className="input"
+                value={assetCategory}
+                onChange={(e) => setAssetCategory(e.target.value as AssetCategory)}
+                style={{ cursor: "pointer" }}
+              >
+                {Object.entries(ASSET_CATEGORIES).map(([key, val]) => (
+                  <option key={key} value={key}>{val.label}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Account Balance">
+              <input
+                type="number"
+                step="any"
+                placeholder="e.g. 10000"
+                className="input"
+                value={accountBalance}
+                onChange={(e) => setAccountBalance(e.target.value)}
+              />
+            </Field>
+          </div>
+
           {/* Row 1: Pair + Direction + Strategy */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
             <Field label="Asset / Pair *" error={fe.pair?.[0]}>
-              <input name="pair" placeholder="e.g. EUR/USD" className={`input ${fe.pair ? "input-error" : ""}`} />
+              <input
+                name="pair"
+                placeholder={assetSuggestions[0] || "e.g. EUR/USD"}
+                className={`input ${fe.pair ? "input-error" : ""}`}
+                list={assetSuggestions.length > 0 ? "asset-suggestions" : undefined}
+              />
+              {assetSuggestions.length > 0 && (
+                <datalist id="asset-suggestions">
+                  {assetSuggestions.map((s) => <option key={s} value={s} />)}
+                </datalist>
+              )}
             </Field>
             <Field label="Direction *" error={fe.direction?.[0]}>
               <select
@@ -229,7 +314,14 @@ export default function NewTradeForm() {
               />
             </Field>
             <Field label="Exit Price">
-              <input name="exitPrice" type="number" step="any" placeholder="0.00" className="input" />
+              <input
+                name="exitPrice"
+                type="number"
+                step="any"
+                placeholder="0.00"
+                className="input"
+                onChange={(e) => setPrices((p) => ({ ...p, exit: e.target.value }))}
+              />
             </Field>
             <Field label="Stop Loss *" error={fe.stopLoss?.[0]}>
               <input
@@ -253,33 +345,92 @@ export default function NewTradeForm() {
             </Field>
           </div>
 
-          {/* RR display */}
-          {rr !== null && (
-            <div
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 8,
-                padding: "6px 12px",
-                background: rr >= 2 ? "var(--success-muted)" : "var(--accent-muted)",
-                border: `1px solid ${rr >= 2 ? "var(--success)" : "var(--accent)"}`,
-                borderRadius: 6,
-                fontSize: 13,
-                color: rr >= 2 ? "var(--success)" : "var(--accent)",
-                fontWeight: 600,
-              }}
-            >
-              Calculated RR: 1 : {rr}
-            </div>
-          )}
+          {/* Smart Calculations Display */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+            {rr !== null && (
+              <div
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "6px 12px",
+                  background: rr >= 2 ? "var(--success-muted)" : "var(--accent-muted)",
+                  border: `1px solid ${rr >= 2 ? "var(--success)" : "var(--accent)"}`,
+                  borderRadius: 6,
+                  fontSize: 13,
+                  color: rr >= 2 ? "var(--success)" : "var(--accent)",
+                  fontWeight: 600,
+                }}
+              >
+                💎 RR: 1 : {rr.toFixed(2)}
+              </div>
+            )}
+            {positionRecommendation && (
+              <div
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "6px 12px",
+                  background: "var(--bg-surface-2)",
+                  border: "1px solid var(--border)",
+                  borderRadius: 6,
+                  fontSize: 13,
+                  color: "var(--text-secondary)",
+                }}
+              >
+                📊 Recommended: {positionRecommendation.size.toFixed(2)} {positionRecommendation.units}
+              </div>
+            )}
+            {estimatedPL && (
+              <div
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "6px 12px",
+                  background: estimatedPL.isProfit ? "var(--success-muted)" : "var(--danger-muted)",
+                  border: `1px solid ${estimatedPL.isProfit ? "var(--success)" : "var(--danger)"}`,
+                  borderRadius: 6,
+                  fontSize: 13,
+                  color: estimatedPL.isProfit ? "var(--success)" : "var(--danger)",
+                  fontWeight: 600,
+                }}
+              >
+                {estimatedPL.isProfit ? "📈" : "📉"} Est. P/L: {estimatedPL.pl >= 0 ? "+" : ""}{estimatedPL.pl.toFixed(2)}
+                {estimatedPL.percentage !== null && ` (${estimatedPL.percentage >= 0 ? "+" : ""}${estimatedPL.percentage.toFixed(2)}%)`}
+              </div>
+            )}
+          </div>
 
           {/* Row 3: Risk */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-            <Field label="Position Size">
-              <input name="positionSize" type="number" step="any" placeholder="e.g. 0.10 lots" className="input" />
-            </Field>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
             <Field label="Risk %">
-              <input name="riskPercent" type="number" step="any" min="0" max="100" placeholder="e.g. 1" className="input" />
+              <input
+                name="riskPercent"
+                type="number"
+                step="any"
+                min="0"
+                max="100"
+                placeholder="e.g. 1"
+                className="input"
+                value={riskPercent}
+                onChange={(e) => setRiskPercent(e.target.value)}
+              />
+            </Field>
+            <Field label="Position Size">
+              <input
+                name="positionSize"
+                type="number"
+                step="any"
+                placeholder="e.g. 0.10 lots"
+                className="input"
+                value={positionSize}
+                onChange={(e) => setPositionSize(e.target.value)}
+              />
+            </Field>
+            <Field label="P/L Result">
+              <input name="profitLoss" type="number" step="any" placeholder="Auto-calculated or manual" className="input" />
             </Field>
           </div>
 
