@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/auth";
 import Link from "next/link";
+import { PdfExportButton } from "@/components/pdf-export-button";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -73,9 +74,12 @@ export default async function DashboardPage() {
             Your trading performance overview
           </p>
         </div>
-        <Link href="/trades/new" className="btn btn-primary">
-          + New Trade
-        </Link>
+        <div style={{ display: "flex", gap: 8 }}>
+          <PdfExportButton range="30d" label="Export PDF" />
+          <Link href="/trades/new" className="btn btn-primary">
+            + New Trade
+          </Link>
+        </div>
       </div>
 
       {/* Stats Grid */}

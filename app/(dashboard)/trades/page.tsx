@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/auth";
 import Link from "next/link";
+import { PdfExportWrapper } from "@/components/pdf-export-wrapper";
 
 export const metadata: Metadata = { title: "Trade History" };
 
@@ -57,9 +58,12 @@ export default async function TradesPage({
             {filtered.length} trade{filtered.length !== 1 ? "s" : ""}
           </p>
         </div>
-        <Link href="/trades/new" className="btn btn-primary">
-          + New Trade
-        </Link>
+        <div style={{ display: "flex", gap: 8 }}>
+          <PdfExportWrapper range="all" label="Export All" />
+          <Link href="/trades/new" className="btn btn-primary">
+            + New Trade
+          </Link>
+        </div>
       </div>
 
       {/* Filters */}

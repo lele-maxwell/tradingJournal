@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/auth";
+import { PdfExportWrapper } from "@/components/pdf-export-wrapper";
 
 export const metadata: Metadata = { title: "Weekly Report" };
 
@@ -64,9 +65,12 @@ export default async function WeeklyReportPage() {
             {weekEnd.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
           </p>
         </div>
-        <Link href="/reports/monthly" style={{ fontSize: 13, color: "var(--accent)", textDecoration: "none" }}>
-          Monthly report →
-        </Link>
+        <div style={{ display: "flex", gap: 12 }}>
+          <PdfExportWrapper range="7d" label="Export PDF" />
+          <Link href="/reports/monthly" style={{ fontSize: 13, color: "var(--accent)", textDecoration: "none" }}>
+            Monthly report →
+          </Link>
+        </div>
       </div>
 
       {total === 0 ? (
