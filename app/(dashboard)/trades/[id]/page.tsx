@@ -76,7 +76,7 @@ export default async function TradeDetailPage({
     ? Object.entries(CHECKLIST_LABELS).map(([key, label]) => ({
         key,
         label,
-        checked: (trade.checklist as Record<string, any>)[key] === true,
+        checked: (trade.checklist as Record<string, unknown>)[key] === true,
       }))
     : [];
 

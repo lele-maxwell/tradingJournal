@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import type { User } from "@supabase/supabase-js";
 import { Hero } from "@/components/landing/Hero";
 import { Features } from "@/components/landing/Features";
 import { Methodology } from "@/components/landing/Methodology";
@@ -9,7 +10,7 @@ import { FolderIcon } from "@/components/icons/FolderIcon";
 import { createClient } from "@/lib/supabase/client";
 
 export default function LandingPage() {
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
 
