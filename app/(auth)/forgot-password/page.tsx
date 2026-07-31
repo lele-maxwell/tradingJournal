@@ -2,12 +2,12 @@
 
 import { useActionState } from "react";
 import Link from "next/link";
-import { signupAction, type AuthState } from "@/lib/actions/auth.actions";
+import { forgotPasswordAction, type AuthState } from "@/lib/actions/auth.actions";
 
 const initialState: AuthState = {};
 
-export default function SignupPage() {
-  const [state, action, pending] = useActionState(signupAction, initialState);
+export default function ForgotPasswordPage() {
+  const [state, action, pending] = useActionState(forgotPasswordAction, initialState);
 
   return (
     <div
@@ -49,10 +49,10 @@ export default function SignupPage() {
               marginBottom: 6,
             }}
           >
-            Start journaling
+            Reset your password
           </h1>
           <p style={{ fontSize: 14, color: "var(--text-muted)" }}>
-            Create your MaxStrat account
+            Enter your email and we&apos;ll send you a reset link
           </p>
         </div>
 
@@ -71,8 +71,7 @@ export default function SignupPage() {
               Check your email
             </h2>
             <p style={{ fontSize: 13, color: "var(--text-muted)", lineHeight: 1.6 }}>
-              We sent a confirmation link to your email address. Click it to
-              activate your account.
+              We sent a password reset link to your email address. Click it to set a new password.
             </p>
             <Link
               href="/login"
@@ -94,36 +93,7 @@ export default function SignupPage() {
                   autoComplete="email"
                   required
                   placeholder="you@example.com"
-                  className="input"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="password">Password</label>
-                <input
-                  id="password"
-                  name="password"
-                  type="password"
-                  autoComplete="new-password"
-                  required
-                  placeholder="Min. 6 characters"
-                  className="input"
-                />
-                <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
-                  Must be at least 6 characters long
-                </p>
-              </div>
-
-              <div>
-                <label htmlFor="confirmPassword">Confirm password</label>
-                <input
-                  id="confirmPassword"
-                  name="confirmPassword"
-                  type="password"
-                  autoComplete="new-password"
-                  required
-                  placeholder="Repeat password"
-                  className="input"
+                  className={`input ${state.error ? "input-error" : ""}`}
                 />
               </div>
 
@@ -161,10 +131,10 @@ export default function SignupPage() {
                         display: "inline-block",
                       }}
                     />
-                    Creating account…
+                    Sending reset link…
                   </span>
                 ) : (
-                  "Create account"
+                  "Send reset link"
                 )}
               </button>
             </form>
@@ -179,7 +149,7 @@ export default function SignupPage() {
             color: "var(--text-muted)",
           }}
         >
-          Already have an account?{" "}
+          Remember your password?{" "}
           <Link
             href="/login"
             style={{ color: "var(--accent)", textDecoration: "none", fontWeight: 500 }}

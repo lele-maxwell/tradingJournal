@@ -5,6 +5,8 @@ import { getUser } from "@/lib/auth";
 
 export const metadata: Metadata = { title: "Monthly Report" };
 
+type TradeWithChecklist = { id: string; pair: string; direction: string; entryTime: Date; exitTime: Date | null; profitLoss: number | null; riskReward: number | null; strategy: string | null; mentalState: string | null; checklist: { score: number } | null };
+
 function formatPL(value: number) {
   const sign = value >= 0 ? "+" : "";
   return `${sign}${value.toFixed(2)}`;
@@ -25,18 +27,18 @@ export default async function MonthlyReportPage() {
   });
 
   const total = trades.length;
-  const wins = trades.filter((t) => (t.profitLoss ?? 0) > 0).length;
-  const losses = trades.filter((t) => (t.profitLoss ?? 0) < 0).length;
+  const wins = trades.filter((t: TradeWithChecklist) => (t.profitLoss ?? 0) > 0).length;
+  const losses = trades.filter((t: TradeWithChecklist) => (t.profitLoss ?? 0) < 0).length;
   const winRate = total ? Math.round((wins / total) * 100) : 0;
-  const totalPL = trades.reduce((s, t) => s + (t.profitLoss ?? 0), 0);
-  const avgRR = total ? trades.reduce((s, t) => s + (t.riskReward ?? 0), 0) / total : 0;
+  const totalPL = trades.reduce((s: number, t: TradeWithChecklist) => s + (t.profitLoss ?? 0), 0);
+  const avgRR = total ? trades.reduce((s: number, t: TradeWithChecklist) => s + (t.riskReward ?? 0), 0) / total : 0;
   const avgChecklist = total
-    ? Math.round(trades.reduce((s, t) => s + (t.checklist?.score ?? 0), 0) / total)
+    ? Math.round(trades.reduce((s: number, t: TradeWithChecklist) => s + (t.checklist?.score ?? 0), 0) / total)
     : 0;
 
   // Strategy performance
   const strategyMap: Record<string, { wins: number; total: number; pl: number }> = {};
-  trades.forEach((t) => {
+  trades.forEach((t: TradeWithChecklist) => {
     const s = t.strategy ?? "No Strategy";
     if (!strategyMap[s]) strategyMap[s] = { wins: 0, total: 0, pl: 0 };
     strategyMap[s].total++;
@@ -47,14 +49,14 @@ export default async function MonthlyReportPage() {
 
   // Average trade duration
   const durations = trades
-    .filter((t) => t.exitTime)
-    .map((t) => new Date(t.exitTime!).getTime() - new Date(t.entryTime).getTime());
-  const avgDurationMs = durations.length ? durations.reduce((s, d) => s + d, 0) / durations.length : 0;
+    .filter((t: TradeWithChecklist) => t.exitTime)
+    .map((t: TradeWithChecklist) => new Date(t.exitTime!).getTime() - new Date(t.entryTime).getTime());
+  const avgDurationMs = durations.length ? durations.reduce((s: number, d: number) => s + d, 0) / durations.length : 0;
   const avgDurationHrs = (avgDurationMs / 1000 / 60 / 60).toFixed(1);
 
   // Emotional consistency
   const mentalCounts: Record<string, number> = {};
-  trades.forEach((t) => {
+  trades.forEach((t: TradeWithChecklist) => {
     if (t.mentalState) mentalCounts[t.mentalState] = (mentalCounts[t.mentalState] ?? 0) + 1;
   });
 

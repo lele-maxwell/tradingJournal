@@ -1,13 +1,15 @@
 "use client";
 
-import { useActionState } from "react";
+import { Suspense, useActionState } from "react";
 import Link from "next/link";
-import { signupAction, type AuthState } from "@/lib/actions/auth.actions";
+import { useSearchParams } from "next/navigation";
+import { resetPasswordAction, type AuthState } from "@/lib/actions/auth.actions";
 
 const initialState: AuthState = {};
 
-export default function SignupPage() {
-  const [state, action, pending] = useActionState(signupAction, initialState);
+function ResetPasswordForm() {
+  const searchParams = useSearchParams();
+  const [state, action, pending] = useActionState(resetPasswordAction, initialState);
 
   return (
     <div
@@ -49,17 +51,17 @@ export default function SignupPage() {
               marginBottom: 6,
             }}
           >
-            Start journaling
+            Set new password
           </h1>
           <p style={{ fontSize: 14, color: "var(--text-muted)" }}>
-            Create your MaxStrat account
+            Enter your new password below
           </p>
         </div>
 
         {/* Success state */}
         {state.success ? (
           <div className="card" style={{ textAlign: "center" }}>
-            <div style={{ fontSize: 32, marginBottom: 12 }}>✉️</div>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>✓</div>
             <h2
               style={{
                 fontSize: 16,
@@ -68,62 +70,49 @@ export default function SignupPage() {
                 marginBottom: 8,
               }}
             >
-              Check your email
+              Password updated
             </h2>
             <p style={{ fontSize: 13, color: "var(--text-muted)", lineHeight: 1.6 }}>
-              We sent a confirmation link to your email address. Click it to
-              activate your account.
+              Your password has been successfully reset. You can now sign in with your new password.
             </p>
             <Link
               href="/login"
               className="btn btn-primary"
               style={{ display: "inline-flex", marginTop: 20 }}
             >
-              Back to login
+              Sign in
             </Link>
           </div>
         ) : (
           <div className="card">
             <form action={action} style={{ display: "flex", flexDirection: "column", gap: 18 }}>
               <div>
-                <label htmlFor="email">Email</label>
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  autoComplete="email"
-                  required
-                  placeholder="you@example.com"
-                  className="input"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="password">Password</label>
+                <label htmlFor="password">New Password</label>
                 <input
                   id="password"
                   name="password"
                   type="password"
                   autoComplete="new-password"
                   required
-                  placeholder="Min. 6 characters"
-                  className="input"
+                  placeholder="Min. 8 characters"
+                  className={`input ${state.error ? "input-error" : ""}`}
+                  minLength={8}
                 />
                 <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
-                  Must be at least 6 characters long
+                  Must be at least 8 characters with one uppercase and one number
                 </p>
               </div>
 
               <div>
-                <label htmlFor="confirmPassword">Confirm password</label>
+                <label htmlFor="confirmPassword">Confirm new password</label>
                 <input
                   id="confirmPassword"
                   name="confirmPassword"
                   type="password"
                   autoComplete="new-password"
                   required
-                  placeholder="Repeat password"
-                  className="input"
+                  placeholder="Repeat new password"
+                  className={`input ${state.error ? "input-error" : ""}`}
                 />
               </div>
 
@@ -161,10 +150,10 @@ export default function SignupPage() {
                         display: "inline-block",
                       }}
                     />
-                    Creating account…
+                    Updating password…
                   </span>
                 ) : (
-                  "Create account"
+                  "Update password"
                 )}
               </button>
             </form>
@@ -179,12 +168,11 @@ export default function SignupPage() {
             color: "var(--text-muted)",
           }}
         >
-          Already have an account?{" "}
           <Link
             href="/login"
             style={{ color: "var(--accent)", textDecoration: "none", fontWeight: 500 }}
           >
-            Sign in
+            Back to login
           </Link>
         </p>
       </div>
@@ -193,5 +181,17 @@ export default function SignupPage() {
         @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
     </div>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={
+      <div style={{ minHeight: "100vh", background: "var(--bg-base)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ fontSize: 14, color: "var(--text-muted)" }}>Loading…</div>
+      </div>
+    }>
+      <ResetPasswordForm />
+    </Suspense>
   );
 }

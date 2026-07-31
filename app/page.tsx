@@ -11,9 +11,10 @@ import { createClient } from "@/lib/supabase/client";
 export default function LandingPage() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const supabase = createClient();
 
   useEffect(() => {
+    const supabase = createClient();
+
     const fetchUser = async () => {
       const { data } = await supabase.auth.getUser();
       setUser(data.user);
@@ -28,7 +29,7 @@ export default function LandingPage() {
     return () => {
       subscription.unsubscribe();
     };
-  }, [supabase]);
+  }, []);
 
   return (
     <div className="landing-root">
