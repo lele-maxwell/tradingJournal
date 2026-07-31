@@ -3,11 +3,13 @@
 import { useActionState } from "react";
 import Link from "next/link";
 import { loginAction, type AuthState } from "@/lib/actions/auth.actions";
+import { useI18n } from "@/i18n/provider";
 
 const initialState: AuthState = {};
 
 export default function LoginPage() {
   const [state, action, pending] = useActionState(loginAction, initialState);
+  const { t } = useI18n();
 
   return (
     <div
@@ -49,10 +51,10 @@ export default function LoginPage() {
               marginBottom: 6,
             }}
           >
-            Welcome back
+            {t("auth.welcomeBack")}
           </h1>
           <p style={{ fontSize: 14, color: "var(--text-muted)" }}>
-            Sign in to your MaxStrat
+            {t("auth.signinSubtitle")}
           </p>
         </div>
 
@@ -60,7 +62,7 @@ export default function LoginPage() {
         <div className="card">
           <form action={action} style={{ display: "flex", flexDirection: "column", gap: 18 }}>
             <div>
-              <label htmlFor="email">Email</label>
+              <label htmlFor="email">{t("auth.email")}</label>
               <input
                 id="email"
                 name="email"
@@ -73,7 +75,7 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label htmlFor="password">Password</label>
+              <label htmlFor="password">{t("auth.password")}</label>
               <input
                 id="password"
                 name="password"
