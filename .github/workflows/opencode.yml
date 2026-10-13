@@ -14,7 +14,7 @@
 # - GRAPHIFY_LLM_API_KEY: Your API key
 name: graphify-review
 
-on:
+"on":
   pull_request:
     types: [opened, synchronize, reopened]
   issue_comment:
