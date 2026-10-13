@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/auth";
 import Link from "next/link";
+import PinnedTicker from "@/components/ticker/PinnedTicker";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -27,7 +28,7 @@ export default async function DashboardPage() {
   weekStart.setDate(now.getDate() - now.getDay() + 1);
   weekStart.setHours(0, 0, 0, 0);
 
-  const [allTrades, recentTrades, weekTrades] = await Promise.all([
+  const [allTrades, recentTrades, weekTrades, profile] = await Promise.all([
     prisma.trade.findMany({
       where: { userId: user.id },
       select: { profitLoss: true, riskReward: true },
@@ -42,6 +43,7 @@ export default async function DashboardPage() {
       where: { userId: user.id, entryTime: { gte: weekStart } },
       select: { profitLoss: true },
     }),
+    prisma.userProfile.findUnique({ where: { userId: user.id } }),
   ]);
 
   const total = allTrades.length;
@@ -168,6 +170,9 @@ export default async function DashboardPage() {
 
         {/* Right column */}
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {/* Pinned Ticker */}
+          <PinnedTicker initialSymbols={Array.isArray(profile?.pinnedSymbols) ? (profile!.pinnedSymbols as string[]) : []} />
+
           {/* This Week */}
           <div className="card">
             <p className="section-title">This Week</p>

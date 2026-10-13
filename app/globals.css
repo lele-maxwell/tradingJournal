@@ -352,3 +352,63 @@ main {
 .trade-row:hover {
   background: var(--bg-hover);
 }
+
+/* ============ Ticker ============ */
+.ticker-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.ticker-dot-loading {
+  background: var(--accent);
+  animation: ticker-pulse 1.2s ease-in-out infinite;
+}
+
+.ticker-dot-idle {
+  background: var(--success);
+}
+
+@keyframes ticker-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.75); }
+}
+
+/* ============ Live Calc Chips ============ */
+.calc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  background: var(--bg-surface-2);
+  color: var(--text-secondary);
+}
+
+.calc-chip-strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.calc-chip-success {
+  color: var(--success);
+  background: var(--success-muted);
+  border-color: var(--success);
+}
+
+.calc-chip-danger {
+  color: var(--danger);
+  background: var(--danger-muted);
+  border-color: var(--danger);
+}
+
+.calc-chip-accent {
+  color: var(--accent);
+  background: var(--accent-muted);
+  border-color: var(--accent);
+}

@@ -6,6 +6,10 @@ export const tradeSchema = z.object({
   direction: z.enum(["buy", "sell"], { message: "Direction must be buy or sell" }),
   strategy: z.string().optional(),
 
+  // Asset classification
+  assetCategory: z.enum(["forex", "index", "futures", "crypto", "stock"]).default("forex"),
+  customAssetId: z.string().optional(),
+
   // Entry & Exit
   entryPrice: z.coerce.number({ message: "Entry price is required" }).positive("Must be positive"),
   exitPrice: z.coerce.number().positive("Must be positive").optional().or(z.literal("")),

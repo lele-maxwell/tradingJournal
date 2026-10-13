@@ -7,11 +7,48 @@ datasource db {
   provider  = "postgresql"
 }
 
+enum AssetCategory {
+  forex
+  index
+  futures
+  crypto
+  stock
+}
+
+model UserProfile {
+  userId         String   @id
+  accountBalance Float    @default(0)
+  baseCurrency   String   @default("USD")
+  defaultRiskPct Float    @default(1)
+  pinnedSymbols  Json     @default("[]")
+  updatedAt      DateTime @updatedAt
+  createdAt      DateTime @default(now())
+}
+
+model CustomAsset {
+  id           String        @id @default(cuid())
+  userId       String
+  symbol       String
+  category     AssetCategory
+  contractSize Float?
+  pipValue     Float?
+  tickSize     Float?
+  createdAt    DateTime      @default(now())
+
+  trades Trade[]
+
+  @@unique([userId, symbol])
+  @@index([userId])
+}
+
 model Trade {
   id             String   @id @default(cuid())
   userId         String
   pair           String
   direction      String   // "buy" | "sell"
+  assetCategory  AssetCategory @default(forex)
+  customAssetId  String?
+  customAsset    CustomAsset?  @relation(fields: [customAssetId], references: [id])
   strategy       String?
   entryPrice     Float
   exitPrice      Float?
@@ -21,7 +58,7 @@ model Trade {
   riskPercent    Float?
   riskReward     Float?
   entryTime      DateTime
-  exitTime       DateTime?
+  exitTime      DateTime?
   entryTf        String?
   higherTf       String?
   profitLoss     Float?

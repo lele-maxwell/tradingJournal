@@ -1,8 +1,11 @@
 "use client";
 
-import { useActionState, useState, useCallback } from "react";
+import { useActionState, useState, useCallback, useMemo } from "react";
 import { createTradeAction, type TradeActionState } from "@/lib/actions/trade.actions";
 import { calcChecklistScore, calcRR } from "@/lib/validations/trade.schema";
+import { BUILTIN_SPECS, getBuiltinSpec, listBuiltinsByCategory, type AssetCategory } from "@/lib/trading/specs";
+import { recommendedLotSize, calcPL } from "@/lib/trading/math";
+import CustomAssetForm from "@/components/trades/CustomAssetForm";
 
 const initialState: TradeActionState = {};
 
@@ -56,10 +59,26 @@ const MENTAL_STATES = [
 
 const TIMEFRAMES = ["1m", "5m", "15m", "30m", "1h", "4h", "1D", "1W"];
 
+const ASSET_CATEGORIES: { value: AssetCategory; label: string; icon: string }[] = [
+  { value: "forex", label: "Forex", icon: "💱" },
+  { value: "index", label: "Indexes", icon: "📊" },
+  { value: "futures", label: "Futures", icon: "📈" },
+  { value: "crypto", label: "Crypto", icon: "🪙" },
+  { value: "stock", label: "Stocks", icon: "🏷️" },
+];
+
 // ────────────────────────────────────────────────────────────────
 // Main Component
 // ────────────────────────────────────────────────────────────────
-export default function NewTradeForm() {
+export default function NewTradeForm({
+  initialBalance = 0,
+  initialRiskPct = 1,
+  initialCustomAssets = [],
+}: {
+  initialBalance?: number;
+  initialRiskPct?: number;
+  initialCustomAssets?: Array<{ id: string; symbol: string; category: AssetCategory; contractSize: number | null; pipValue: number | null }>;
+} = {}) {
   const [state, action, pending] = useActionState(createTradeAction, initialState);
 
   // Checklist booleans
@@ -67,8 +86,21 @@ export default function NewTradeForm() {
   // Psychology booleans
   const [psych, setPsych] = useState<Record<string, boolean>>({});
   const [mentalState, setMentalState] = useState("");
-  // Price fields for live RR calc
-  const [prices, setPrices] = useState({ direction: "buy", entry: "", sl: "", tp: "" });
+  // Price fields for live RR calc + asset classification
+  const [prices, setPrices] = useState({
+    direction: "buy",
+    entry: "",
+    sl: "",
+    tp: "",
+    category: "forex" as AssetCategory,
+    symbol: "EUR/USD",
+    customAssetId: "",
+  });
+  // Profile-derived inputs
+  const [balance, setBalance] = useState(String(initialBalance));
+  const [riskPct, setRiskPct] = useState(String(initialRiskPct));
+  // Available custom assets (passed in from server, mutated after save)
+  const [customAssets] = useState(initialCustomAssets);
   // Screenshot previews
   const [previews, setPreviews] = useState<Record<string, string>>({});
 
@@ -85,6 +117,45 @@ export default function NewTradeForm() {
     parseFloat(prices.sl),
     parseFloat(prices.tp)
   );
+
+  // Live calculation of recommended size, RR dollar values, and P/L preview.
+  const calc = useMemo(() => {
+    const entry = parseFloat(prices.entry);
+    const sl = parseFloat(prices.sl);
+    const tp = parseFloat(prices.tp);
+    const bal = parseFloat(balance);
+    const rp = parseFloat(riskPct);
+    const custom = prices.customAssetId
+      ? customAssets.find((a) => a.id === prices.customAssetId) ?? null
+      : null;
+    const builtin = !custom ? getBuiltinSpec(prices.symbol) ?? null : null;
+    let assetSpec: import("@/lib/trading/specs").AssetSpec | null = null;
+    let contractSizeOverride: number | undefined = undefined;
+    if (custom) {
+      const builtinForCategory = Object.values(BUILTIN_SPECS).find((s) => s.category === custom.category);
+      assetSpec = {
+        category: custom.category,
+        contractSize: custom.contractSize ?? builtinForCategory?.contractSize ?? 1,
+        pipValuePerUnit: custom.pipValue ?? builtinForCategory?.pipValuePerUnit ?? 0.01,
+        pipDecimal: builtinForCategory?.pipDecimal ?? 2,
+        unitLabel: builtinForCategory?.unitLabel ?? "contract",
+      };
+      contractSizeOverride = custom.contractSize ?? undefined;
+    } else if (builtin) {
+      assetSpec = builtin;
+    }
+    if (!assetSpec) return null;
+    const lot = recommendedLotSize({
+      balance: bal, riskPct: rp, entry, sl, spec: assetSpec, contractSizeOverride,
+    });
+    if (!lot.valid) return { spec: assetSpec, lot, plAtTp: null as number | null, rewardDollars: null as number | null };
+    const plAtTp = calcPL({
+      direction: prices.direction as "buy" | "sell",
+      entry, exit: tp, size: lot.size, spec: assetSpec, contractSizeOverride,
+    });
+    const rewardDollars = Number.isFinite(tp) ? Math.abs(plAtTp) : null;
+    return { spec: assetSpec, lot, plAtTp, rewardDollars };
+  }, [prices.entry, prices.sl, prices.tp, prices.direction, prices.symbol, prices.customAssetId, balance, riskPct, customAssets]);
 
   const handleScreenshot = useCallback(
     (type: string, file: File | null) => {
@@ -107,6 +178,10 @@ export default function NewTradeForm() {
         <input key={k} type="hidden" name={k} value={String(v)} />
       ))}
       <input type="hidden" name="mentalState" value={mentalState} />
+      <input type="hidden" name="assetCategory" value={prices.category} />
+      <input type="hidden" name="customAssetId" value={prices.customAssetId} />
+      <input type="hidden" name="accountBalance" value={balance} />
+      <input type="hidden" name="riskPct" value={riskPct} />
 
       {/* ── Section 1: Strategy Checklist ── */}
       <Section
@@ -194,10 +269,55 @@ export default function NewTradeForm() {
       {/* ── Section 2: Trade Journal ── */}
       <Section number={2} title="Trade Journal" subtitle="Record your execution details">
         <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-          {/* Row 1: Pair + Direction + Strategy */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
-            <Field label="Asset / Pair *" error={fe.pair?.[0]}>
-              <input name="pair" placeholder="e.g. EUR/USD" className={`input ${fe.pair ? "input-error" : ""}`} />
+          {/* Row 1: Asset Category + Symbol + Direction + Strategy */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 14 }}>
+            <Field label="Asset Category *" error={undefined}>
+              <select
+                name="assetCategoryVisible"
+                className="input"
+                value={prices.category}
+                onChange={(e) =>
+                  setPrices((p) => ({
+                    ...p,
+                    category: e.target.value as AssetCategory,
+                    symbol: listBuiltinsByCategory(e.target.value as AssetCategory)[0] ?? "",
+                    customAssetId: "",
+                  }))
+                }
+                style={{ cursor: "pointer" }}
+              >
+                {ASSET_CATEGORIES.map((c) => (
+                  <option key={c.value} value={c.value}>
+                    {c.icon} {c.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Symbol *" error={fe.pair?.[0]}>
+              {prices.customAssetId ? (
+                <input
+                  name="pair"
+                  className="input"
+                  value={customAssets.find((a) => a.id === prices.customAssetId)?.symbol ?? ""}
+                  readOnly
+                />
+              ) : (
+                <select
+                  name="pair"
+                  className={`input ${fe.pair ? "input-error" : ""}`}
+                  value={prices.symbol}
+                  onChange={(e) => setPrices((p) => ({ ...p, symbol: e.target.value }))}
+                  style={{ cursor: "pointer" }}
+                >
+                  {listBuiltinsByCategory(prices.category).map((sym) => (
+                    <option key={sym} value={sym}>{sym}</option>
+                  ))}
+                  {customAssets.filter((a) => a.category === prices.category).map((a) => (
+                    <option key={a.id} value={a.symbol}>{a.symbol} (custom)</option>
+                  ))}
+                </select>
+              )}
+              <CustomAssetForm />
             </Field>
             <Field label="Direction *" error={fe.direction?.[0]}>
               <select
@@ -213,6 +333,33 @@ export default function NewTradeForm() {
             </Field>
             <Field label="Strategy">
               <input name="strategy" placeholder="e.g. OB Retest" className="input" />
+            </Field>
+          </div>
+
+          {/* Row 1b: Account balance + Risk % (drives live calc) */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+            <Field label="Account Balance">
+              <input
+                type="number"
+                step="any"
+                min="0"
+                placeholder="0"
+                className="input"
+                value={balance}
+                onChange={(e) => setBalance(e.target.value)}
+              />
+            </Field>
+            <Field label="Risk %">
+              <input
+                type="number"
+                step="any"
+                min="0"
+                max="100"
+                placeholder="1"
+                className="input"
+                value={riskPct}
+                onChange={(e) => setRiskPct(e.target.value)}
+              />
             </Field>
           </div>
 
@@ -253,24 +400,50 @@ export default function NewTradeForm() {
             </Field>
           </div>
 
-          {/* RR display */}
-          {rr !== null && (
+          {/* Live calc panel */}
+          {calc && (
             <div
+              data-testid="live-calc"
               style={{
-                display: "inline-flex",
-                alignItems: "center",
+                display: "flex",
+                flexWrap: "wrap",
                 gap: 8,
-                padding: "6px 12px",
-                background: rr >= 2 ? "var(--success-muted)" : "var(--accent-muted)",
-                border: `1px solid ${rr >= 2 ? "var(--success)" : "var(--accent)"}`,
-                borderRadius: 6,
-                fontSize: 13,
-                color: rr >= 2 ? "var(--success)" : "var(--accent)",
-                fontWeight: 600,
+                padding: "10px 12px",
+                background: "var(--bg-surface-2)",
+                border: "1px solid var(--border)",
+                borderRadius: 8,
               }}
             >
-              Calculated RR: 1 : {rr}
+              <span className="calc-chip calc-chip-accent calc-chip-strong" data-testid="calc-lot">
+                📦 {calc.lot.size} {calc.spec.unitLabel}{calc.lot.size !== 1 ? "s" : ""}
+              </span>
+              <span className="calc-chip">
+                📏 SL: {calc.lot.slPips} {calc.spec.pipDecimal === 4 ? "pips" : calc.spec.pipDecimal === 2 ? "pips" : "ticks"}
+              </span>
+              <span className="calc-chip calc-chip-danger calc-chip-strong">
+                Risk: ${calc.lot.riskDollars.toFixed(2)}
+              </span>
+              {calc.rewardDollars !== null && (
+                <span className="calc-chip calc-chip-success calc-chip-strong">
+                  Reward: ${calc.rewardDollars.toFixed(2)}
+                </span>
+              )}
+              {calc.plAtTp !== null && (
+                <span className={`calc-chip ${calc.plAtTp >= 0 ? "calc-chip-success" : "calc-chip-danger"} calc-chip-strong`}>
+                  P/L @ TP: {calc.plAtTp >= 0 ? "+" : ""}${calc.plAtTp.toFixed(2)}
+                </span>
+              )}
+              {rr !== null && (
+                <span className={`calc-chip ${rr >= 2 ? "calc-chip-success" : "calc-chip-accent"} calc-chip-strong`}>
+                  RR: 1 : {rr}
+                </span>
+              )}
             </div>
+          )}
+          {!calc && (parseFloat(prices.entry) > 0 || parseFloat(prices.sl) > 0) && (
+            <p style={{ fontSize: 12, color: "var(--text-muted)" }}>
+              Fill balance, risk%, entry and stop loss to see live sizing.
+            </p>
           )}
 
           {/* Row 3: Risk */}
