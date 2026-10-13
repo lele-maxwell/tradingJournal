@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/auth";
+import { mergePinSymbol, mergeUnpinSymbol } from "@/lib/trading/profile-helpers";
 
 export type ProfileActionState = {
   error?: string;
@@ -126,4 +127,52 @@ export async function listCustomAssets() {
   const user = await getUser();
   if (!user) return [];
   return prisma.customAsset.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" } });
+}
+
+/**
+ * Append a symbol to the user's pinned list. Idempotent — re-pinning an
+ * already-pinned symbol is a no-op. Uses a single read-modify-write inside
+ * the function (no atomic upsert) so concurrent pins serialize on the
+ * last-write-wins semantics Prisma gives us; this matches the rest of the
+ * app's per-user update patterns.
+ */
+export async function pinSymbolAction(symbol: string): Promise<ProfileActionState> {
+  const user = await getUser();
+  if (!user) return { error: "Unauthorized" };
+  if (!symbol || typeof symbol !== "string" || symbol.length > 32) {
+    return { error: "Invalid symbol" };
+  }
+
+  const profile = await getOrCreateProfile();
+  if (!profile) return { error: "Unauthorized" };
+
+  const current = Array.isArray(profile.pinnedSymbols) ? (profile.pinnedSymbols as string[]) : [];
+  const next = mergePinSymbol(current, symbol);
+  await prisma.userProfile.update({
+    where: { userId: user.id },
+    data: { pinnedSymbols: next },
+  });
+  revalidatePath("/dashboard");
+  return { success: true };
+}
+
+/** Remove a symbol from the user's pinned list. Idempotent. */
+export async function unpinSymbolAction(symbol: string): Promise<ProfileActionState> {
+  const user = await getUser();
+  if (!user) return { error: "Unauthorized" };
+  if (!symbol || typeof symbol !== "string" || symbol.length > 32) {
+    return { error: "Invalid symbol" };
+  }
+
+  const profile = await getOrCreateProfile();
+  if (!profile) return { error: "Unauthorized" };
+
+  const current = Array.isArray(profile.pinnedSymbols) ? (profile.pinnedSymbols as string[]) : [];
+  const next = mergeUnpinSymbol(current, symbol);
+  await prisma.userProfile.update({
+    where: { userId: user.id },
+    data: { pinnedSymbols: next },
+  });
+  revalidatePath("/dashboard");
+  return { success: true };
 }

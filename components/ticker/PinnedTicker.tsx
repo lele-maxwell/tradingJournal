@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import type { Quote } from "@/lib/trading/prices";
 import AddPinControl from "@/components/ticker/AddPinControl";
+import { unpinSymbolAction } from "@/lib/actions/profile.actions";
 
 interface PinnedTickerProps {
   initialSymbols: string[];
@@ -18,11 +19,23 @@ const POLL_MS = 15_000;
 
 export default function PinnedTicker({ initialSymbols }: PinnedTickerProps) {
   const [symbols, setSymbols] = useState<string[]>(initialSymbols);
+  const [, startUnpin] = useTransition();
   const [state, setState] = useState<QuoteState>({
     bySymbol: {},
     loading: false,
     error: null,
   });
+
+  function handleUnpin(sym: string) {
+    startUnpin(async () => {
+      const result = await unpinSymbolAction(sym);
+      if (result.error) {
+        setState((s) => ({ ...s, error: result.error ?? null }));
+        return;
+      }
+      setSymbols((prev) => prev.filter((s) => s !== sym));
+    });
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -98,15 +111,39 @@ export default function PinnedTicker({ initialSymbols }: PinnedTickerProps) {
                     {q ? new Date(q.ts).toLocaleTimeString() : "loading…"}
                   </span>
                 </div>
-                <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-                  <span style={{ fontSize: 13, color: "var(--text-primary)", fontVariantNumeric: "tabular-nums" }}>
-                    {q ? q.price.toLocaleString(undefined, { maximumFractionDigits: 4 }) : "—"}
-                  </span>
-                  {q && (
-                    <span style={{ fontSize: 11, color, fontVariantNumeric: "tabular-nums" }}>
-                      {q.changePct > 0 ? "+" : ""}{q.changePct.toFixed(2)}%
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                    <span style={{ fontSize: 13, color: "var(--text-primary)", fontVariantNumeric: "tabular-nums" }}>
+                      {q ? q.price.toLocaleString(undefined, { maximumFractionDigits: 4 }) : "—"}
                     </span>
-                  )}
+                    {q && (
+                      <span style={{ fontSize: 11, color, fontVariantNumeric: "tabular-nums" }}>
+                        {q.changePct > 0 ? "+" : ""}{q.changePct.toFixed(2)}%
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleUnpin(sym)}
+                    aria-label={`Unpin ${sym}`}
+                    title={`Unpin ${sym}`}
+                    style={{
+                      width: 22,
+                      height: 22,
+                      borderRadius: 5,
+                      border: "1px solid var(--border)",
+                      background: "transparent",
+                      color: "var(--text-muted)",
+                      cursor: "pointer",
+                      fontSize: 14,
+                      lineHeight: 1,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    ×
+                  </button>
                 </div>
               </li>
             );

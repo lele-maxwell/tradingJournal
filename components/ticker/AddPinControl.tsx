@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { BUILTIN_SPECS } from "@/lib/trading/specs";
-import { updateProfileAction } from "@/lib/actions/profile.actions";
+import { pinSymbolAction } from "@/lib/actions/profile.actions";
 
 interface AddPinControlProps {
   /** Called after a successful pin so the parent can update its state. */
@@ -19,15 +19,7 @@ export default function AddPinControl({ onAdded }: AddPinControlProps) {
   function handlePin(symbol: string) {
     setError(null);
     startTransition(async () => {
-      const fd = new FormData();
-      fd.set("accountBalance", "0");
-      fd.set("baseCurrency", "USD");
-      fd.set("defaultRiskPct", "1");
-      // Read the existing pinned list by inspecting props would require lifting state up;
-      // we post a one-element list and rely on the parent to merge. Simpler: parent
-      // owns the canonical list, so we just inform it.
-      fd.set("pinnedSymbols", JSON.stringify([symbol]));
-      const result = await updateProfileAction({}, fd);
+      const result = await pinSymbolAction(symbol);
       if (result.error) {
         setError(result.error);
         return;

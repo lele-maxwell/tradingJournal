@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { tradeSchema, calcChecklistScore, calcRR } from "@/lib/validations/trade.schema";
+import { validateCustomAssetCategory } from "@/lib/trading/trade-validation";
 
 export type TradeActionState = {
   error?: string;
@@ -71,6 +72,26 @@ export async function createTradeAction(
   }
 
   const data = parsed.data;
+
+  // Cross-field validation: if a customAssetId is set, the referenced
+  // CustomAsset must belong to this user AND its category must match
+  // the trade's assetCategory. Without this, a trader could submit
+  // a forex trade against a crypto custom asset and silently get the
+  // wrong contract size / pip value in future reads.
+  const cfv = validateCustomAssetCategory({
+    customAssetId: data.customAssetId,
+    assetCategory: data.assetCategory,
+    customAsset: data.customAssetId
+      ? await prisma.customAsset.findUnique({
+          where: { id: data.customAssetId },
+          select: { category: true, userId: true },
+        })
+      : null,
+    currentUserId: user.id,
+  });
+  if (cfv) {
+    return { fieldErrors: { customAssetId: [cfv] } };
+  }
   const score = calcChecklistScore(data);
   const rr = calcRR(
     data.direction,
