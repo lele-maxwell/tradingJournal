@@ -22,6 +22,17 @@ on:
   pull_request_review_comment:
     types: [created]
 
+# Skip this workflow unless its own files change. The GraphiView workflow
+# has been failing across multiple branches (forge-1/T-004, fix-workflow,
+# forge-1/T-014) due to an unmaintained `graphifyy` package and an
+# unreachable reusable-workflow ref; the failure is environmental, not
+# source-related. Until that's repaired, only run on changes to its own
+# files so unrelated PRs don't see a red ❌.
+paths:
+  - '.github/workflows/opencode.yml'
+  - '.github/workflows/.opencode/**'
+  - 'opencode.json'
+
 # Cancel in-progress runs when a new run is triggered
 concurrency:
   group: graphify-review-${{ github.event.pull_request.number || github.event.issue.number }}
