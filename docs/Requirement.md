@@ -39,6 +39,7 @@ Edge Journal
 ├── New Trade Page
 ├── Trade History Page
 ├── Trade Detail Page
+├── Notes Workspace
 ├── Weekly Report Page
 └── Monthly Report Page
 ```
@@ -127,8 +128,6 @@ Edge Journal
 
 ### 3.6 Weekly Report Page
 
-**Purpose:** Provide performance summary for current week
-
 **Functionality:**
 - Display weekly metrics:
   - Total trades
@@ -154,6 +153,22 @@ Edge Journal
   - Checklist consistency
   - Strategy performance
 - Calculate metrics based on trades within current month date range
+
+### 3.8 Notes Workspace
+
+**Purpose:** Provide a personal knowledge workspace for capturing long-form, markdown-formatted ideas, strategies, market observations, psychology lessons, and personal reflections.
+
+**Functionality:**
+
+- Create a note with a title and markdown body. Creation and last-modified timestamps are recorded automatically.
+- Edit notes in place. Changes auto-save 1.2 s after the last keystroke. A concurrency check prevents one tab from silently overwriting a newer save made in another tab.
+- Delete a note with confirmation.
+- List view shows all notes with title, two-line excerpt, created date, and updated date.
+- Search across note title and content (case-insensitive substring).
+- Sort the list by Recently Updated, Recently Created, or Alphabetical.
+- Markdown rendering via GFM (GitHub-Flavored Markdown): headings, bold/italic, lists, task-list checkboxes, blockquotes, fenced code blocks, tables, autolinks, and strikethrough. Raw HTML in note bodies is intentionally not rendered.
+- Editor view modes: Edit, Preview, Split. Split shows the editor on the left and the rendered preview on the right on desktop; panes stack vertically on narrow screens.
+- Notes are per-user. Ownership is enforced on every create/update/delete.
 
 ## 4. Business Rules and Logic
 
