@@ -85,15 +85,3 @@ model TradeImage {
 
   @@index([tradeId])
 }
-
-model Note {
-  id        String   @id @default(cuid())
-  userId    String
-  title     String
-  content   String   @default("")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([userId])
-  @@index([userId, updatedAt])
-}
