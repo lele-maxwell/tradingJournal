@@ -47,17 +47,6 @@ const navItems = [
       </svg>
     ),
   },
-  {
-    label: "Notes",
-    href: "/notes",
-    icon: (
-      <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-        <path d="M5 4h11l3 3v13H5z" strokeLinejoin="round" />
-        <path d="M16 4v3h3" strokeLinejoin="round" />
-        <path d="M8 11h8M8 15h6" strokeLinecap="round" />
-      </svg>
-    ),
-  },
 ];
 
 export default function Sidebar() {
