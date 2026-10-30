@@ -1,5 +1,3 @@
-import { FolderIcon } from "@/components/icons/FolderIcon";
-
 export function Features() {
   const features = [
     {

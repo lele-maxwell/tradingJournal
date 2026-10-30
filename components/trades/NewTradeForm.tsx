@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState, useCallback } from "react";
+import Link from "next/link";
 import { createTradeAction, type TradeActionState } from "@/lib/actions/trade.actions";
 import { calcChecklistScore, calcRR } from "@/lib/validations/trade.schema";
 
@@ -453,9 +454,9 @@ export default function NewTradeForm() {
             "Save Trade"
           )}
         </button>
-        <a href="/trades" className="btn btn-secondary btn-lg">
+        <Link href="/trades" className="btn btn-secondary btn-lg">
           Cancel
-        </a>
+        </Link>
       </div>
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
